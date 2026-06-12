@@ -580,7 +580,11 @@ select {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1 1 130px;
+  /* 160px basis: on narrow phones two controls wrap into rows instead of
+     squeezing; min-width:0 lets the iOS date input shrink (its flex min-width
+     is `auto`, which otherwise overflows onto the neighbouring control) */
+  flex: 1 1 160px;
+  min-width: 0;
 }
 .editor__control-label {
   font-size: 12px;
@@ -597,7 +601,20 @@ select {
   font-size: 16px;
   outline: none;
   width: 100%;
+  max-width: 100%;
+  min-height: 44px;
   color: var(--ink);
+}
+.editor__date {
+  /* iOS renders native date inputs with an intrinsic width that ignores the
+     flex container and overlaps neighbours; appearance:none makes it a
+     normal styleable field (min-height above keeps it from collapsing when
+     empty) */
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
 }
 .editor__select {
   appearance: none;
