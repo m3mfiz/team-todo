@@ -17,7 +17,13 @@ if (typeof (globalThis as { require?: unknown }).require === 'undefined') {
 // `serialize-javascript` dependency runs a bare `crypto.getRandomValues()` at
 // module-load time. Under Vite's loader on Node 18 the global `crypto` is not
 // present in this scope, so expose the Web Crypto API before the build runs.
-(globalThis as { crypto?: unknown }).crypto = webcrypto;
+// On Node 20+ the global already exists as a getter-only property — assigning
+// to it throws, so only shim when it is actually missing.
+if (typeof (globalThis as { crypto?: unknown }).crypto === 'undefined') {
+  (globalThis as { crypto?: unknown }).crypto = webcrypto;
+}
+
+const nodeMajor = Number(process.versions.node.split('.')[0]);
 
 export default defineConfig({
   plugins: [
@@ -25,12 +31,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/apple-touch-icon.png'],
-      // Emit the service worker unminified. In production mode workbox runs
-      // terser in a worker thread where `globalThis.crypto` is undefined on
-      // Node 18, crashing `serialize-javascript`; dev mode skips that step and
-      // still produces a valid, fully functional sw.js.
+      // On Node 18 workbox's production mode runs terser in a worker thread
+      // where `globalThis.crypto` is undefined, crashing `serialize-javascript`
+      // — emit the service worker unminified there. Node 20+ minifies normally.
       workbox: {
-        mode: 'development',
+        mode: nodeMajor < 20 ? 'development' : 'production',
       },
       manifest: {
         name: 'Задачи команды',
