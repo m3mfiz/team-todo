@@ -43,8 +43,27 @@ check('health', health.status === 200 && health.json?.ok === true);
 
 const admin = await login('admin', process.env.ADMIN_PASSWORD ?? 'admin123');
 check('admin login', admin.user?.role === 'admin');
-const ivan = await login('ivan', 'ivan123');
-const maria = await login('maria', 'maria123');
+
+// Self-contained roster: the seed users may have been deleted/renamed by the
+// admin, so the smoke creates its own throwaway members and removes them at
+// the end.
+const runId = String(Date.now() % 1e9);
+async function createMember(tag) {
+  const r = await req('POST', '/api/admin/users', {
+    token: admin.accessToken,
+    body: {
+      username: `smoke${tag}${runId}`.slice(0, 30),
+      displayName: `Смоук-${tag}`,
+      password: `smoke-${tag}-pw1`,
+    },
+  });
+  if (r.status !== 201) throw new Error(`create smoke member ${tag} -> ${r.status}`);
+  return r.json;
+}
+const userA = await createMember('a');
+const userB = await createMember('b');
+const ivan = await login(userA.username, 'smoke-a-pw1');
+const maria = await login(userB.username, 'smoke-b-pw1');
 check('member login', ivan.user?.role === 'member' && maria.user?.role === 'member');
 
 const stamp = Date.now();
@@ -107,9 +126,13 @@ check('reopen works', reopen.status === 200 && reopen.json?.status === 'open');
 const noAuth = await req('GET', '/api/tasks');
 check('401 without token', noAuth.status === 401);
 
-// cleanup smoke tasks (admin)
+// cleanup smoke tasks and throwaway members (admin)
 for (const t of [tIvan, tAll, tOwn]) {
   if (t.json?.id) await req('DELETE', `/api/tasks/${t.json.id}`, { token: admin.accessToken });
+}
+for (const u of [userA, userB]) {
+  const del = await req('DELETE', `/api/admin/users/${u.id}`, { token: admin.accessToken });
+  check(`cleanup member ${u.displayName}`, del.status === 200);
 }
 
 console.log(`\nSmoke: ${passed} passed, ${failed} failed`);
