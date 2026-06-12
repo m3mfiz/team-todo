@@ -158,6 +158,47 @@ select {
   background: var(--bg-soft);
 }
 
+/* ---------------- Push notifications banner ---------------- */
+.push-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 20px;
+  padding: 12px 14px;
+  background: var(--blue-tint);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.push-banner__text {
+  flex: 1;
+}
+.push-banner__enable.btn {
+  flex: none;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  border-radius: 9px;
+}
+.push-banner__dismiss {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--gray);
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 50%;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+.push-banner__dismiss:active {
+  background: var(--bg-soft);
+  color: var(--ink);
+}
+
 /* ---------------- Boot spinner ---------------- */
 .boot {
   display: grid;
@@ -653,6 +694,12 @@ input[type='date']::-webkit-date-and-time-value {
 .editor__trash-text {
   font-size: 14px;
   font-weight: 600;
+}
+
+.editor__deadline-ro {
+  font-size: 16px;
+  color: var(--ink-2);
+  padding: 10px 2px;
 }
 
 /* read-only expansion */

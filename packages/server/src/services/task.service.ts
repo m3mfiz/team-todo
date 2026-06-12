@@ -214,6 +214,12 @@ export function updateTask(
     throw AppError.forbidden('Only an admin can change the assignee');
   }
 
+  // Deadlines are set by the administrator; members cannot move them, even on
+  // their own tasks (setting one at creation time is allowed).
+  if (patch.deadline !== undefined && !isAdmin) {
+    throw AppError.forbidden('Only an admin can change the deadline');
+  }
+
   if (
     patch.assigneeId !== undefined &&
     patch.assigneeId !== null &&

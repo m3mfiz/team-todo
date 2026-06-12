@@ -206,4 +206,25 @@ export const api = {
   deleteTask(id: number): Promise<void> {
     return request<void>(`/tasks/${id}`, { method: 'DELETE' });
   },
+
+  vapidPublicKey(): Promise<{ publicKey: string | null }> {
+    return request<{ publicKey: string | null }>('/push/vapid-public-key');
+  },
+
+  pushSubscribe(input: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+  }): Promise<{ ok: true }> {
+    return request<{ ok: true }>('/push/subscribe', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  pushUnsubscribe(endpoint: string): Promise<{ ok: true }> {
+    return request<{ ok: true }>('/push/unsubscribe', {
+      method: 'POST',
+      body: { endpoint },
+    });
+  },
 };

@@ -163,10 +163,12 @@ function TaskEditor({
     setSaving(true);
     const input: UpdateTaskInput = {
       title: title.trim(),
-      notes: notes.trim() ? notes.trim() : null,
-      deadline: deadline ? deadline : null,
+      // always a string — the server stores notes NOT NULL
+      notes: notes.trim(),
     };
     if (isAdmin) {
+      // only the admin may move deadlines or reassign
+      input.deadline = deadline ? deadline : null;
       input.assigneeId = assignee === 'all' ? null : Number(assignee);
     }
     try {
@@ -231,15 +233,27 @@ function TaskEditor({
         rows={2}
       />
       <div className="editor__row">
-        <label className="editor__control">
-          <span className="editor__control-label">Срок</span>
-          <input
-            className="editor__date"
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
-        </label>
+        {/* Deadlines are moved only by the admin; members see theirs read-only */}
+        {isAdmin ? (
+          <label className="editor__control">
+            <span className="editor__control-label">Срок</span>
+            <input
+              className="editor__date"
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
+          </label>
+        ) : (
+          task.deadline && (
+            <div className="editor__control">
+              <span className="editor__control-label">Срок</span>
+              <span className="editor__deadline-ro">
+                {formatDeadlineShort(task.deadline)}
+              </span>
+            </div>
+          )
+        )}
         {isAdmin && (
           <label className="editor__control">
             <span className="editor__control-label">Кому</span>

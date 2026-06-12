@@ -14,6 +14,12 @@ import { TaskList } from './components/TaskList';
 import { AddSheet } from './components/AddSheet';
 import { PlusIcon } from './icons';
 import { todayKey } from './dates';
+import {
+  ensurePushSubscription,
+  getPushSupport,
+  requestAndSubscribe,
+  unsubscribePush,
+} from './push';
 
 const TAB_TITLES: Record<TabKey, string> = {
   today: 'Сегодня',
@@ -24,6 +30,7 @@ const TAB_TITLES: Record<TabKey, string> = {
 
 const COMPLETE_LINGER_MS = 1400;
 const POLL_MS = 30000;
+const PUSH_DISMISSED_KEY = 'team-todo-push-dismissed';
 
 type Phase = 'loading' | 'login' | 'ready';
 
@@ -37,6 +44,7 @@ export default function App(): JSX.Element {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [leavingIds, setLeavingIds] = useState<Set<number>>(new Set());
+  const [showPushBanner, setShowPushBanner] = useState(false);
 
   const leaveTimers = useRef<Map<number, number>>(new Map());
 
@@ -123,6 +131,35 @@ export default function App(): JSX.Element {
     };
   }, [phase, refetch]);
 
+  // --- Push notifications setup ---------------------------------------------
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const support = getPushSupport();
+    if (support === 'granted') {
+      void ensurePushSubscription();
+      setShowPushBanner(false);
+    } else if (support === 'default') {
+      const dismissed = localStorage.getItem(PUSH_DISMISSED_KEY) === '1';
+      setShowPushBanner(!dismissed);
+    } else {
+      setShowPushBanner(false);
+    }
+  }, [phase]);
+
+  const handleEnablePush = useCallback(async () => {
+    const result = await requestAndSubscribe();
+    if (result !== 'granted') {
+      // denied / unsupported / disabled — stop nagging.
+      localStorage.setItem(PUSH_DISMISSED_KEY, '1');
+    }
+    setShowPushBanner(false);
+  }, []);
+
+  const dismissPushBanner = useCallback(() => {
+    localStorage.setItem(PUSH_DISMISSED_KEY, '1');
+    setShowPushBanner(false);
+  }, []);
+
   // Clean up linger timers on unmount
   useEffect(() => {
     const timers = leaveTimers.current;
@@ -141,6 +178,7 @@ export default function App(): JSX.Element {
   );
 
   const handleLogout = useCallback(async () => {
+    await unsubscribePush();
     await api.logout();
     goToLogin();
   }, [goToLogin]);
@@ -319,6 +357,29 @@ export default function App(): JSX.Element {
           </div>
         )}
       </header>
+
+      {showPushBanner && (
+        <div className="push-banner" role="region" aria-label="Уведомления">
+          <span className="push-banner__text">
+            Включайте уведомления о новых задачах и сроках
+          </span>
+          <button
+            type="button"
+            className="btn btn--primary push-banner__enable"
+            onClick={() => void handleEnablePush()}
+          >
+            Включить
+          </button>
+          <button
+            type="button"
+            className="push-banner__dismiss"
+            onClick={dismissPushBanner}
+            aria-label="Скрыть"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <main className="content">
         <TaskList

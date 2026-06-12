@@ -25,6 +25,25 @@ if (jwtSecret === jwtRefreshSecret) {
   throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be different');
 }
 
+// Web-push VAPID keys are optional: when both keys are present push is enabled,
+// otherwise every push path becomes a silent no-op. A missing/blank subject
+// defaults to a placeholder so a present key pair still configures correctly.
+const rawVapidPublic = process.env.VAPID_PUBLIC_KEY;
+const rawVapidPrivate = process.env.VAPID_PRIVATE_KEY;
+const rawVapidSubject = process.env.VAPID_SUBJECT;
+const hasVapidKeys =
+  rawVapidPublic !== undefined &&
+  rawVapidPublic !== '' &&
+  rawVapidPrivate !== undefined &&
+  rawVapidPrivate !== '';
+const vapidPublicKey = hasVapidKeys ? rawVapidPublic : undefined;
+const vapidPrivateKey = hasVapidKeys ? rawVapidPrivate : undefined;
+const vapidSubject = hasVapidKeys
+  ? rawVapidSubject !== undefined && rawVapidSubject !== ''
+    ? rawVapidSubject
+    : 'mailto:admin@ask4k.live'
+  : undefined;
+
 // DB_PATH default is relative to the repo root.
 const repoRoot = new URL('../../../', import.meta.url);
 const rawDbPath = process.env.DB_PATH ?? './data/team-todo.db';
@@ -48,6 +67,9 @@ export const config = {
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
   dbPath,
   tz: process.env.TZ ?? 'UTC',
+  vapidPublicKey,
+  vapidPrivateKey,
+  vapidSubject,
 } as const;
 
 export type Config = typeof config;

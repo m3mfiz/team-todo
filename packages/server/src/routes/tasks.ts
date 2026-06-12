@@ -7,6 +7,7 @@ import {
   listTasks,
   updateTask,
 } from '../services/task.service.ts';
+import { notifyNewTask } from '../services/notify.service.ts';
 
 const deadlineSchema = z
   .string()
@@ -26,7 +27,8 @@ const createSchema = z.object({
 const updateSchema = z
   .object({
     title: z.string().min(1).max(300).optional(),
-    notes: z.string().max(5000).optional(),
+    // null is accepted and means "clear" — clients send it for emptied notes
+    notes: z.string().max(5000).nullable().optional(),
     deadline: deadlineSchema.nullable().optional(),
     assigneeId: z.number().int().nullable().optional(),
     status: z.enum(['open', 'done']).optional(),
@@ -63,6 +65,15 @@ export function registerTaskRoutes(app: FastifyInstance, db: DB): void {
         deadline: body.deadline ?? null,
         assigneeId: body.assigneeId,
       });
+      // Fire-and-forget: notification dispatch must never delay or fail the
+      // 201 response.
+      void notifyNewTask(db, {
+        id: task.id,
+        title: task.title,
+        deadline: task.deadline,
+        assigneeId: task.assigneeId,
+        creatorId: task.creatorId,
+      }).catch((err) => request.log.error(err, 'notifyNewTask failed'));
       reply.code(201);
       return task;
     },
@@ -74,7 +85,11 @@ export function registerTaskRoutes(app: FastifyInstance, db: DB): void {
     async (request) => {
       const { id } = idParamSchema.parse(request.params);
       const body = updateSchema.parse(request.body);
-      return updateTask(db, request.user, Number(id), body);
+      return updateTask(db, request.user, Number(id), {
+        ...body,
+        // notes are stored NOT NULL: null from the client means "clear"
+        notes: body.notes === null ? '' : body.notes,
+      });
     },
   );
 

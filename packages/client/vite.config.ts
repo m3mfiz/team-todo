@@ -29,13 +29,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['icons/apple-touch-icon.png'],
-      // On Node 18 workbox's production mode runs terser in a worker thread
-      // where `globalThis.crypto` is undefined, crashing `serialize-javascript`
-      // — emit the service worker unminified there. Node 20+ minifies normally.
-      workbox: {
-        mode: nodeMajor < 20 ? 'development' : 'production',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
+        // injectManifest compiles sw.ts via Vite/esbuild (not terser), so the
+        // Node-18 serialize-javascript crash that affected generateSW does not
+        // apply here. Keep esbuild minification off on Node 18 as a defensive
+        // guard, matching the prior generateSW behaviour; minify on Node 20+.
+        minify: nodeMajor >= 20,
       },
       manifest: {
         id: '/',

@@ -305,25 +305,70 @@ describe('tasks', () => {
     expect(titleOnly.statusCode).toBe(200);
     expect(titleOnly.json().deadline).toBe('2026-09-01');
 
-    // Replacing the deadline works.
+    // Replacing the deadline works (admin — members cannot move deadlines).
     const replace = await app.inject({
       method: 'PATCH',
       url: `/api/tasks/${taskId}`,
-      headers: authHeader(ivan.accessToken),
+      headers: authHeader(admin.accessToken),
       payload: { deadline: '2027-01-15' },
     });
     expect(replace.statusCode).toBe(200);
     expect(replace.json().deadline).toBe('2027-01-15');
 
-    // null clears it.
+    // null clears it (admin).
     const clear = await app.inject({
       method: 'PATCH',
       url: `/api/tasks/${taskId}`,
-      headers: authHeader(ivan.accessToken),
+      headers: authHeader(admin.accessToken),
       payload: { deadline: null },
     });
     expect(clear.statusCode).toBe(200);
     expect(clear.json().deadline).toBeNull();
+  });
+
+  it('member cannot change the deadline even on his own task (403); admin can', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'Ivan plans himself',
+      deadline: '2026-10-01',
+    });
+    const taskId = created.json().id as number;
+
+    const ivanMove = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { deadline: '2026-11-01' },
+    });
+    expect(ivanMove.statusCode).toBe(403);
+
+    const adminMove = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(admin.accessToken),
+      payload: { deadline: '2026-11-01' },
+    });
+    expect(adminMove.statusCode).toBe(200);
+    expect(adminMove.json().deadline).toBe('2026-11-01');
+  });
+
+  // Regression: the client editor sends notes:null for tasks without notes;
+  // this used to 400 the whole PATCH (including title edits).
+  it('PATCH with notes:null succeeds and clears notes to empty string', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'No notes task',
+      notes: 'temp',
+    });
+    const taskId = created.json().id as number;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { title: 'Edited fine', notes: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().title).toBe('Edited fine');
+    expect(res.json().notes).toBe('');
   });
 
   it('updatedAt strictly increases after a PATCH (1.1s apart)', async () => {

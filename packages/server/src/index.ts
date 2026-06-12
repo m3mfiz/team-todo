@@ -14,6 +14,9 @@ import { registerAuth } from './plugins/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerUserRoutes } from './routes/users.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
+import { registerPushRoutes } from './routes/push.ts';
+import { initPush } from './services/push.service.ts';
+import { startReminderCron } from './services/reminder-cron.ts';
 
 const ALLOWED_ORIGINS = ['http://localhost:5173'];
 
@@ -58,6 +61,16 @@ export async function buildApp(
   registerAuthRoutes(app, db);
   registerUserRoutes(app, db);
   registerTaskRoutes(app, db);
+  registerPushRoutes(app, db);
+
+  // Configure web push (silent no-op if VAPID keys are absent/invalid).
+  initPush(app.log);
+
+  // Schedule the daily deadline-reminder sweep — but never under test, where a
+  // background cron would keep the process alive and fire real sends.
+  if (process.env.VITEST !== 'true') {
+    startReminderCron(db, app.log);
+  }
 
   app.get('/api/health', async () => ({ ok: true }));
 
