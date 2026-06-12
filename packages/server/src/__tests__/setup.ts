@@ -47,14 +47,29 @@ export interface LoginResult {
   user: { id: number; username: string; displayName: string; role: string };
 }
 
+// Monotonic counter used to mint a unique client IP per login so that
+// per-ip rate-limit state never bleeds between independent tests.
+let ipCounter = 0;
+
+// Returns a fresh, unique 10.99.x.y address. trustProxy 'loopback' makes the
+// app honour x-forwarded-for from inject (which originates on 127.0.0.1).
+export function nextTestIp(): string {
+  ipCounter += 1;
+  const x = Math.floor(ipCounter / 254) % 254;
+  const y = (ipCounter % 254) + 1;
+  return `10.99.${x}.${y}`;
+}
+
 export async function login(
   app: FastifyInstance,
   username: string,
   password: string,
+  ip: string = nextTestIp(),
 ): Promise<LoginResult> {
   const res = await app.inject({
     method: 'POST',
     url: '/api/auth/login',
+    headers: { 'x-forwarded-for': ip },
     payload: { username, password },
   });
   if (res.statusCode !== 200) {

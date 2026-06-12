@@ -4,7 +4,7 @@ export function todayKey(): string {
   return toKey(new Date());
 }
 
-function toKey(d: Date): string {
+export function toKey(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -17,7 +17,7 @@ function fromKey(key: string): Date {
   return new Date(y, m - 1, d);
 }
 
-function addDays(key: string, n: number): string {
+export function addDays(key: string, n: number): string {
   const d = fromKey(key);
   d.setDate(d.getDate() + n);
   return toKey(d);

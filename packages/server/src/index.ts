@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { existsSync } from 'node:fs';
+import { STATUS_CODES } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCors from '@fastify/cors';
@@ -72,6 +73,25 @@ export async function buildApp(
       reply.code(error.statusCode).send({
         error: error.name,
         message: error.message,
+      });
+      return;
+    }
+    // Framework errors carry an HTTP statusCode (e.g. @fastify/rate-limit → 429).
+    // Surface client errors (4xx) with the right status instead of masking them
+    // as 500, but only forward the raw message for 429 (the rate-limiter's
+    // retry hint is safe and useful); other framework 4xx get a generic text so
+    // plugin internals are never exposed.
+    if (
+      typeof error.statusCode === 'number' &&
+      error.statusCode >= 400 &&
+      error.statusCode < 500
+    ) {
+      reply.code(error.statusCode).send({
+        error: STATUS_CODES[error.statusCode] ?? 'Client Error',
+        message:
+          error.statusCode === 429
+            ? error.message
+            : STATUS_CODES[error.statusCode] ?? 'Request error',
       });
       return;
     }

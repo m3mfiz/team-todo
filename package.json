@@ -14,7 +14,7 @@
     "build": "npm -w packages/client run build",
     "start": "npm -w packages/server run start",
     "db:setup": "npm -w packages/server run db:setup",
-    "test": "npm -w packages/server run test",
+    "test": "npm -w packages/server run test && npm -w packages/client run test",
     "typecheck": "tsc --noEmit -p packages/server && tsc --noEmit -p packages/client"
   },
   "devDependencies": {

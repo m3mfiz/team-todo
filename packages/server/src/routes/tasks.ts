@@ -31,7 +31,13 @@ const updateSchema = z
     assigneeId: z.number().int().nullable().optional(),
     status: z.enum(['open', 'done']).optional(),
   })
-  .strict();
+  .strict()
+  // Body-shape validation lives at this layer so the response is uniform for
+  // every id (like unknown-field/strict above) and never varies by whether
+  // the task exists or is visible.
+  .refine((obj) => Object.keys(obj).length > 0, {
+    message: 'Update must include at least one field',
+  });
 
 const idParamSchema = z.object({
   id: z.string().regex(/^\d+$/, 'id must be a numeric string'),

@@ -9,6 +9,7 @@ let dbPath: string;
 let admin: LoginResult;
 let ivan: LoginResult;
 let maria: LoginResult;
+let sergey: LoginResult;
 
 beforeAll(async () => {
   const ctx = await buildTestApp();
@@ -17,6 +18,7 @@ beforeAll(async () => {
   admin = await login(app, 'admin', 'admin123');
   ivan = await login(app, 'ivan', 'ivan123');
   maria = await login(app, 'maria', 'maria123');
+  sergey = await login(app, 'sergey', 'sergey123');
 });
 
 afterAll(async () => {
@@ -221,5 +223,190 @@ describe('tasks', () => {
       payload: { assigneeId: String(maria.user.id) },
     });
     expect(patched.statusCode).toBe(400);
+  });
+
+  it('maria cannot complete ivan\'s personal task: 404 (no existence leak)', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'Ivan private',
+    });
+    const taskId = created.json().id as number;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(maria.accessToken),
+      payload: { status: 'done' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('assignee (not creator) can complete but cannot edit title or delete', async () => {
+    const created = await createTask(admin.accessToken, {
+      title: 'Admin task assigned to ivan',
+      assigneeId: ivan.user.id,
+    });
+    const taskId = created.json().id as number;
+
+    const complete = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { status: 'done' },
+    });
+    expect(complete.statusCode).toBe(200);
+    expect(complete.json().status).toBe('done');
+
+    const editTitle = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { title: 'Ivan renamed' },
+    });
+    expect(editTitle.statusCode).toBe(403);
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+    });
+    expect(del.statusCode).toBe(403);
+  });
+
+  it('member cannot change the assignee of his own task (403)', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'Ivan reassign attempt',
+    });
+    const taskId = created.json().id as number;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { assigneeId: maria.user.id },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('PATCH deadline null clears it; a title-only PATCH leaves deadline untouched', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'Has deadline',
+      deadline: '2026-09-01',
+    });
+    const taskId = created.json().id as number;
+    expect(created.json().deadline).toBe('2026-09-01');
+
+    // Title-only patch must not touch the deadline.
+    const titleOnly = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { title: 'Renamed, deadline kept' },
+    });
+    expect(titleOnly.statusCode).toBe(200);
+    expect(titleOnly.json().deadline).toBe('2026-09-01');
+
+    // Replacing the deadline works.
+    const replace = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { deadline: '2027-01-15' },
+    });
+    expect(replace.statusCode).toBe(200);
+    expect(replace.json().deadline).toBe('2027-01-15');
+
+    // null clears it.
+    const clear = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { deadline: null },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().deadline).toBeNull();
+  });
+
+  it('updatedAt strictly increases after a PATCH (1.1s apart)', async () => {
+    const created = await createTask(ivan.accessToken, {
+      title: 'Track updatedAt',
+    });
+    const taskId = created.json().id as number;
+    const before = created.json().updatedAt as string;
+
+    // sqlite datetime('now') is second-granular; wait >1s to guarantee a tick.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(ivan.accessToken),
+      payload: { title: 'Touched' },
+    });
+    expect(patched.statusCode).toBe(200);
+    const after = patched.json().updatedAt as string;
+    expect(after > before).toBe(true);
+  });
+
+  it('orders open-with-earlier-deadline first, no-deadline opens next, done last', async () => {
+    // Fresh creator so the visible set is predictable for this assertion.
+    const later = await createTask(sergey.accessToken, {
+      title: 'order-later',
+      deadline: '2026-12-31',
+    });
+    const earlier = await createTask(sergey.accessToken, {
+      title: 'order-earlier',
+      deadline: '2026-06-20',
+    });
+    const none = await createTask(sergey.accessToken, {
+      title: 'order-none',
+    });
+    const doneTask = await createTask(sergey.accessToken, {
+      title: 'order-done',
+      deadline: '2026-01-01',
+    });
+    const doneId = doneTask.json().id as number;
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${doneId}`,
+      headers: authHeader(sergey.accessToken),
+      payload: { status: 'done' },
+    });
+
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/tasks',
+      headers: authHeader(sergey.accessToken),
+    });
+    const order = (listed.json() as Array<{ id: number }>).map((t) => t.id);
+
+    const iEarlier = order.indexOf(earlier.json().id as number);
+    const iLater = order.indexOf(later.json().id as number);
+    const iNone = order.indexOf(none.json().id as number);
+    const iDone = order.indexOf(doneId);
+
+    // earlier deadline before later deadline
+    expect(iEarlier).toBeLessThan(iLater);
+    // both dated opens before the no-deadline open
+    expect(iLater).toBeLessThan(iNone);
+    // every open before the done task
+    expect(iNone).toBeLessThan(iDone);
+  });
+
+  it('admin POST without assigneeId creates an everyone-task (assigneeId null)', async () => {
+    const res = await createTask(admin.accessToken, {
+      title: 'Admin no-assignee everyone task',
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().assigneeId).toBeNull();
+  });
+
+  it('GET /api/nonexistent -> 404 with JSON content-type', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nonexistent',
+      headers: authHeader(admin.accessToken),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
   });
 });
