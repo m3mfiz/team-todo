@@ -20,6 +20,10 @@
   --bg: #ffffff;
   --bg-soft: #f7f7f8;
   --bg-elev: #ffffff;
+  /* Tap/hover affordance on interactive fields. Translucent so it stays
+     visible on top of any card surface (incl. --bg-soft expanded cards)
+     in both light and dark themes. iOS systemFill-style gray. */
+  --tap-highlight: rgba(120, 120, 128, 0.12);
   --ink: #1c1c1e;
   --ink-2: #3a3a3c;
   --gray: #8e8e93;
@@ -53,6 +57,7 @@
     --bg: #000000;
     --bg-soft: #1c1c1e;
     --bg-elev: #1c1c1e;
+    --tap-highlight: rgba(120, 120, 128, 0.28);
     --ink: #ffffff;
     --ink-2: #ebebf0;
     --gray: #8e8e93;
@@ -701,16 +706,7 @@ input[type='date']::-webkit-date-and-time-value {
   font-weight: 600;
 }
 
-.editor__deadline-ro {
-  font-size: 16px;
-  color: var(--ink-2);
-  padding: 10px 2px;
-}
-
-/* read-only expansion */
-.editor--readonly {
-  padding-top: 0;
-}
+/* read-only expansion (legacy, kept for compatibility) */
 .editor__notes-ro {
   margin: 0;
   font-size: 15px;
@@ -721,20 +717,116 @@ input[type='date']::-webkit-date-and-time-value {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 .editor__fact {
   display: flex;
+  align-items: center;
   gap: 10px;
   font-size: 14px;
+  min-height: 44px;
 }
 .editor__fact dt {
   color: var(--gray);
   min-width: 56px;
+  flex: 0 0 auto;
 }
 .editor__fact dd {
   margin: 0;
   color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+}
+/* Static fact value (non-interactive) */
+.editor__fact-value {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* ── View-first editor ── */
+.editor--view {
+  padding-top: 2px;
+}
+
+/* Tappable field rows — Things-style: no border, subtle bg on hover/active */
+.editor__field-tap {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 10px 8px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--ink-2);
+  cursor: pointer;
+  min-height: 44px;
+  transition: background-color 120ms var(--ease);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.editor__field-tap:hover,
+.editor__field-tap:focus-visible {
+  background: var(--tap-highlight);
+}
+@media (hover: none) {
+  .editor__field-tap:active {
+    background: var(--tap-highlight);
+  }
+}
+
+/* Title variant — slightly larger + bolder */
+.editor__title-view {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 8px 8px;
+}
+
+/* Notes variant */
+.editor__notes-view {
+  min-height: 44px;
+}
+.editor__notes-text {
+  white-space: pre-wrap;
+  display: block;
+}
+
+.editor__placeholder {
+  color: var(--gray-2);
+  font-style: normal;
+}
+
+/* Inline date input inside the facts dl */
+.editor__date--inline {
+  border: 1px solid var(--blue);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  outline: none;
+  min-height: 36px;
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--ink);
+}
+
+/* Inline select inside the facts dl */
+.editor__select--inline {
+  border: 1px solid var(--blue);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  padding: 6px 28px 6px 10px;
+  font-size: 14px;
+  outline: none;
+  min-height: 36px;
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238e8e93' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
 
 /* per-member completion of shared («Всем») tasks */

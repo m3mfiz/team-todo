@@ -50,9 +50,12 @@ describe('isOverdue', () => {
 });
 
 describe('formatDeadlineShort', () => {
-  it('labels today/tomorrow/yesterday relatively', () => {
+  it('labels today as «Сегодня» (capitalized)', () => {
+    expect(formatDeadlineShort(todayKey())).toBe('Сегодня');
+  });
+
+  it('labels tomorrow and yesterday relatively (lowercase)', () => {
     const today = todayKey();
-    expect(formatDeadlineShort(today)).toBe('сегодня');
     expect(formatDeadlineShort(addDays(today, 1))).toBe('завтра');
     expect(formatDeadlineShort(addDays(today, -1))).toBe('вчера');
   });

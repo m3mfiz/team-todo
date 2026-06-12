@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import type { Task, UpdateTaskInput, User } from '../types';
 import { formatDeadlineShort, isOverdue } from '../dates';
 import { CheckMark, TrashIcon } from '../icons';
@@ -115,12 +115,11 @@ export function TaskRow({
       </div>
 
       {expanded && (
-        <TaskEditor
+        <TaskDetail
           task={task}
           isAdmin={isAdmin}
           canEdit={canEdit}
           members={members}
-          onCancel={() => onToggleExpand(task.id)}
           onSave={onSave}
           onDelete={onDelete}
         />
@@ -192,55 +191,92 @@ function CompletionList({
   );
 }
 
-interface TaskEditorProps {
+// Which field is currently being edited
+type ActiveField = 'title' | 'notes' | 'deadline' | 'assignee' | null;
+
+interface TaskDetailProps {
   task: Task;
   isAdmin: boolean;
   canEdit: boolean;
   members: User[];
-  onCancel: () => void;
   onSave: (id: number, input: UpdateTaskInput) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
 
-function TaskEditor({
+/**
+ * Unified view+edit component.
+ * Always opens in view mode. Tapping an interactive field activates it.
+ * Save/Cancel appear as soon as any field is dirty.
+ */
+function TaskDetail({
   task,
   isAdmin,
   canEdit,
   members,
-  onCancel,
   onSave,
   onDelete,
-}: TaskEditorProps): JSX.Element {
-  const [title, setTitle] = useState(task.title);
-  const [notes, setNotes] = useState(task.notes ?? '');
-  const [deadline, setDeadline] = useState(task.deadline ?? '');
-  // 'all' sentinel maps to assigneeId === null
-  const [assignee, setAssignee] = useState<string>(
+}: TaskDetailProps): JSX.Element {
+  // Draft values — only committed on Save
+  const [draftTitle, setDraftTitle] = useState(task.title);
+  const [draftNotes, setDraftNotes] = useState(task.notes ?? '');
+  const [draftDeadline, setDraftDeadline] = useState(task.deadline ?? '');
+  const [draftAssignee, setDraftAssignee] = useState<string>(
     task.assigneeId === null ? 'all' : String(task.assigneeId),
   );
+
+  const [activeField, setActiveField] = useState<ActiveField>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const titleRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (canEdit) titleRef.current?.focus();
-  }, [canEdit]);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const notesInputRef = useRef<HTMLTextAreaElement>(null);
+  const deadlineInputRef = useRef<HTMLInputElement>(null);
+  const selectRef = useRef<HTMLSelectElement>(null);
+
+  // Dirty check — any draft differs from original
+  const isDirty =
+    draftTitle.trim() !== task.title ||
+    draftNotes.trim() !== (task.notes ?? '') ||
+    draftDeadline !== (task.deadline ?? '') ||
+    draftAssignee !== (task.assigneeId === null ? 'all' : String(task.assigneeId));
+
+  function activateField(field: ActiveField, focusCb?: () => void): void {
+    setActiveField(field);
+    // Let the DOM update, then focus
+    if (focusCb) {
+      requestAnimationFrame(focusCb);
+    }
+  }
+
+  function handleCancel(): void {
+    // Reset all drafts to original values
+    setDraftTitle(task.title);
+    setDraftNotes(task.notes ?? '');
+    setDraftDeadline(task.deadline ?? '');
+    setDraftAssignee(task.assigneeId === null ? 'all' : String(task.assigneeId));
+    setActiveField(null);
+    setConfirmDelete(false);
+  }
 
   async function handleSave(): Promise<void> {
-    if (saving || !title.trim()) return;
+    if (saving || !draftTitle.trim()) return;
+    if (!isDirty) {
+      // Nothing changed — never send a no-op PATCH; just leave edit mode.
+      setActiveField(null);
+      return;
+    }
     setSaving(true);
     const input: UpdateTaskInput = {
-      title: title.trim(),
-      // always a string — the server stores notes NOT NULL
-      notes: notes.trim(),
+      title: draftTitle.trim(),
+      notes: draftNotes.trim(),
     };
     if (isAdmin) {
-      // only the admin may move deadlines or reassign
-      input.deadline = deadline ? deadline : null;
-      input.assigneeId = assignee === 'all' ? null : Number(assignee);
+      input.deadline = draftDeadline ? draftDeadline : null;
+      input.assigneeId = draftAssignee === 'all' ? null : Number(draftAssignee);
     }
     try {
       await onSave(task.id, input);
+      setActiveField(null);
     } finally {
       setSaving(false);
     }
@@ -259,121 +295,223 @@ function TaskEditor({
     }
   }
 
-  if (!canEdit) {
-    return (
-      <div className="editor editor--readonly">
-        {task.notes && <p className="editor__notes-ro">{task.notes}</p>}
-        <dl className="editor__facts">
-          {task.deadline && (
-            <div className="editor__fact">
-              <dt>Срок</dt>
-              <dd>{formatDeadlineShort(task.deadline)}</dd>
-            </div>
-          )}
-          <div className="editor__fact">
-            <dt>Кому</dt>
-            <dd>{task.assigneeId === null ? 'Всем' : task.assigneeName}</dd>
-          </div>
-          <div className="editor__fact">
-            <dt>Автор</dt>
-            <dd>{task.creatorName}</dd>
-          </div>
-        </dl>
-        <CompletionList task={task} members={members} />
-      </div>
-    );
-  }
+  // Deadline display value
+  const deadlineDisplay = draftDeadline
+    ? formatDeadlineShort(draftDeadline)
+    : 'Нет';
+
+  // Assignee display value
+  const assigneeDisplay =
+    draftAssignee === 'all'
+      ? 'Всем'
+      : (members.find((m) => String(m.id) === draftAssignee)?.displayName ??
+        task.assigneeName ??
+        'Всем');
+
+  const showActions = isDirty || activeField !== null;
 
   return (
-    <div className="editor">
-      <input
-        ref={titleRef}
-        className="editor__title"
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Название"
-      />
-      <textarea
-        className="editor__notes"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Заметки"
-        rows={2}
-      />
-      <div className="editor__row">
-        {/* Deadlines are moved only by the admin; members see theirs read-only */}
-        {isAdmin ? (
-          <label className="editor__control">
-            <span className="editor__control-label">Срок</span>
-            <input
-              className="editor__date"
-              type="date"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-            />
-          </label>
+    <div className="editor editor--view">
+      {/* ── Title row (duplicated inside expanded area for tap-to-edit) ── */}
+      {canEdit ? (
+        activeField === 'title' ? (
+          <input
+            ref={titleInputRef}
+            autoFocus
+            className="editor__title"
+            type="text"
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="Название"
+          />
         ) : (
-          task.deadline && (
-            <div className="editor__control">
-              <span className="editor__control-label">Срок</span>
-              <span className="editor__deadline-ro">
-                {formatDeadlineShort(task.deadline)}
-              </span>
-            </div>
-          )
-        )}
-        {isAdmin && (
-          <label className="editor__control">
-            <span className="editor__control-label">Кому</span>
-            <select
-              className="editor__select"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-            >
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.displayName}
-                </option>
-              ))}
-              <option value="all">Всем</option>
-            </select>
-          </label>
-        )}
-      </div>
+          <button
+            type="button"
+            className="editor__field-tap editor__title-view"
+            onClick={() =>
+              activateField('title', () => titleInputRef.current?.focus())
+            }
+            aria-label="Редактировать название"
+          >
+            {draftTitle || <span className="editor__placeholder">Название</span>}
+          </button>
+        )
+      ) : null}
 
+      {/* ── Notes ── */}
+      {canEdit ? (
+        activeField === 'notes' ? (
+          <textarea
+            ref={notesInputRef}
+            autoFocus
+            className="editor__notes"
+            value={draftNotes}
+            onChange={(e) => setDraftNotes(e.target.value)}
+            placeholder="Заметки"
+            rows={3}
+          />
+        ) : (
+          <button
+            type="button"
+            className="editor__field-tap editor__notes-view"
+            onClick={() =>
+              activateField('notes', () => notesInputRef.current?.focus())
+            }
+            aria-label="Редактировать заметки"
+          >
+            {draftNotes ? (
+              <span className="editor__notes-text">{draftNotes}</span>
+            ) : (
+              <span className="editor__placeholder">Добавить заметки…</span>
+            )}
+          </button>
+        )
+      ) : (
+        task.notes && (
+          <p className="editor__notes-ro">{task.notes}</p>
+        )
+      )}
+
+      {/* ── Facts block ── */}
+      <dl className="editor__facts">
+        {/* Срок */}
+        <div className="editor__fact">
+          <dt>Срок</dt>
+          <dd>
+            {isAdmin && canEdit ? (
+              activeField === 'deadline' ? (
+                <input
+                  ref={deadlineInputRef}
+                  autoFocus
+                  className="editor__date editor__date--inline"
+                  type="date"
+                  value={draftDeadline}
+                  onChange={(e) => setDraftDeadline(e.target.value)}
+                  onBlur={() => setActiveField(null)}
+                  style={{ WebkitAppearance: 'none', appearance: 'none' }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="editor__field-tap editor__fact-value"
+                  onClick={() =>
+                    activateField('deadline', () =>
+                      deadlineInputRef.current?.focus(),
+                    )
+                  }
+                  aria-label="Редактировать срок"
+                >
+                  {deadlineDisplay}
+                </button>
+              )
+            ) : (
+              <span className="editor__fact-value">
+                {task.deadline ? formatDeadlineShort(task.deadline) : 'Нет'}
+              </span>
+            )}
+          </dd>
+        </div>
+
+        {/* Кому */}
+        <div className="editor__fact">
+          <dt>Кому</dt>
+          <dd>
+            {isAdmin && canEdit ? (
+              activeField === 'assignee' ? (
+                <select
+                  ref={selectRef}
+                  autoFocus
+                  className="editor__select editor__select--inline"
+                  value={draftAssignee}
+                  onChange={(e) => {
+                    setDraftAssignee(e.target.value);
+                    setActiveField(null);
+                  }}
+                  onBlur={() => setActiveField(null)}
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                  <option value="all">Всем</option>
+                </select>
+              ) : (
+                <button
+                  type="button"
+                  className="editor__field-tap editor__fact-value"
+                  onClick={() =>
+                    activateField('assignee', () => selectRef.current?.focus())
+                  }
+                  aria-label="Редактировать исполнителя"
+                >
+                  {assigneeDisplay}
+                </button>
+              )
+            ) : (
+              <span className="editor__fact-value">
+                {task.assigneeId === null ? 'Всем' : task.assigneeName}
+              </span>
+            )}
+          </dd>
+        </div>
+
+        {/* От кого */}
+        {task.creatorName ? (
+          <div className="editor__fact">
+            <dt>От кого</dt>
+            <dd>
+              <span className="editor__fact-value">{task.creatorName}</span>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+
+      {/* ── Completion block for shared tasks ── */}
       <CompletionList task={task} members={members} />
 
-      <div className="editor__actions">
-        <button
-          type="button"
-          className={`editor__trash${confirmDelete ? ' editor__trash--confirm' : ''}`}
-          onClick={handleDelete}
-          disabled={saving}
-          aria-label="Удалить задачу"
-        >
-          <TrashIcon size={19} />
-          {confirmDelete && <span className="editor__trash-text">Удалить?</span>}
-        </button>
-        <div className="editor__actions-right">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Отмена
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={handleSave}
-            disabled={saving || !title.trim()}
-          >
-            Сохранить
-          </button>
+      {/* ── Actions: trash + Save/Cancel ── */}
+      {(showActions || canEdit) && (
+        <div className="editor__actions">
+          {canEdit ? (
+            <button
+              type="button"
+              className={`editor__trash${confirmDelete ? ' editor__trash--confirm' : ''}`}
+              onClick={handleDelete}
+              disabled={saving}
+              aria-label="Удалить задачу"
+            >
+              <TrashIcon size={19} />
+              {confirmDelete && (
+                <span className="editor__trash-text">Удалить?</span>
+              )}
+            </button>
+          ) : (
+            <span />
+          )}
+
+          {showActions && (
+            <div className="editor__actions-right">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleCancel}
+                disabled={saving}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={handleSave}
+                disabled={saving || !draftTitle.trim() || !isDirty}
+              >
+                Сохранить
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

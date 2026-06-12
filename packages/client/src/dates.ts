@@ -39,7 +39,7 @@ const weekdayFmt = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' });
 // '5 июня' — short relative-aware human label for a deadline key.
 export function formatDeadlineShort(key: string): string {
   const today = todayKey();
-  if (key === today) return 'сегодня';
+  if (key === today) return 'Сегодня';
   if (key === addDays(today, 1)) return 'завтра';
   if (key === addDays(today, -1)) return 'вчера';
   const d = fromKey(key);
