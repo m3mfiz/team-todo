@@ -1,0 +1,24 @@
+{
+  "name": "team-todo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Things-style team task manager (5 users): admin assigns tasks to members or everyone",
+  "workspaces": [
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm -w packages/server run dev",
+    "dev:client": "npm -w packages/client run dev",
+    "build": "npm -w packages/client run build",
+    "start": "npm -w packages/server run start",
+    "db:setup": "npm -w packages/server run db:setup",
+    "test": "npm -w packages/server run test",
+    "typecheck": "tsc --noEmit -p packages/server && tsc --noEmit -p packages/client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.5.4"
+  }
+}
