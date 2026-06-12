@@ -1,12 +1,12 @@
 import type { DB } from '../db/index.ts';
 import { AppError } from '../utils/errors.ts';
 
-export interface CurrentUser {
+interface CurrentUser {
   id: number;
   role: 'admin' | 'member';
 }
 
-export interface TaskRow {
+interface TaskRow {
   id: number;
   title: string;
   notes: string;
@@ -21,7 +21,7 @@ export interface TaskRow {
   assignee_name: string | null;
 }
 
-export interface TaskJson {
+interface TaskJson {
   id: number;
   title: string;
   notes: string;
@@ -55,7 +55,7 @@ const SELECT_BASE = `
   LEFT JOIN users a ON a.id = t.assignee_id
 `;
 
-export function toTaskJson(row: TaskRow): TaskJson {
+function toTaskJson(row: TaskRow): TaskJson {
   return {
     id: row.id,
     title: row.title,
@@ -127,7 +127,7 @@ function userExists(db: DB, id: number): boolean {
   return row !== undefined;
 }
 
-export interface CreateTaskInput {
+interface CreateTaskInput {
   title: string;
   notes?: string;
   deadline?: string | null;
@@ -181,7 +181,7 @@ export function createTask(
   return toTaskJson(row as TaskRow);
 }
 
-export interface UpdateTaskPatch {
+interface UpdateTaskPatch {
   title?: string;
   notes?: string;
   deadline?: string | null;

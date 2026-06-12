@@ -4,7 +4,7 @@ export function todayKey(): string {
   return toKey(new Date());
 }
 
-export function toKey(d: Date): string {
+function toKey(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -12,12 +12,12 @@ export function toKey(d: Date): string {
 }
 
 // Parse a 'YYYY-MM-DD' key into a local Date (midnight local).
-export function fromKey(key: string): Date {
+function fromKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-export function addDays(key: string, n: number): string {
+function addDays(key: string, n: number): string {
   const d = fromKey(key);
   d.setDate(d.getDate() + n);
   return toKey(d);
@@ -66,7 +66,7 @@ export function formatGroupHeader(key: string): string {
   return capitalize(base);
 }
 
-export function capitalize(s: string): string {
+function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
