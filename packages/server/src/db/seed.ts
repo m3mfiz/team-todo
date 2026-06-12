@@ -38,6 +38,17 @@ async function insertUser(db: DB, user: SeedUser): Promise<boolean> {
   return true;
 }
 
+// Members are bootstrap-only: once ANY member row exists (live or
+// soft-deleted), the roster is admin-managed and the seed must not touch it —
+// otherwise a deploy would resurrect deliberately deleted employees with
+// default passwords.
+function hasAnyMember(db: DB): boolean {
+  return (
+    db.prepare(`SELECT 1 FROM users WHERE role = 'member' LIMIT 1`).get() !==
+    undefined
+  );
+}
+
 export async function seed(db: DB): Promise<string[]> {
   const created: string[] = [];
 
@@ -51,15 +62,17 @@ export async function seed(db: DB): Promise<string[]> {
     created.push(admin.username);
   }
 
-  for (const member of MEMBERS) {
-    const inserted = await insertUser(db, {
-      username: member.username,
-      displayName: member.displayName,
-      password: `${member.username}123`,
-      role: 'member',
-    });
-    if (inserted) {
-      created.push(member.username);
+  if (!hasAnyMember(db)) {
+    for (const member of MEMBERS) {
+      const inserted = await insertUser(db, {
+        username: member.username,
+        displayName: member.displayName,
+        password: `${member.username}123`,
+        role: 'member',
+      });
+      if (inserted) {
+        created.push(member.username);
+      }
     }
   }
 

@@ -390,3 +390,34 @@ describe('push recipients exclude soft-deleted users', () => {
     expect(reminder?.recipientIds).toContain(admin.id);
   });
 });
+
+describe('seed does not resurrect deleted members', () => {
+  it('re-running seed after a member soft-delete creates nothing', async () => {
+    const admin = await adminToken();
+
+    const ivan = db
+      .prepare(
+        `SELECT id FROM users WHERE username = 'ivan' AND deleted_at IS NULL`,
+      )
+      .get() as { id: number };
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/users/${ivan.id}`,
+      headers: authHeader(admin.accessToken),
+    });
+    expect(del.statusCode).toBe(200);
+
+    const { seed } = await import('../db/seed.ts');
+    const created = await seed(db);
+    // Roster is admin-managed once any member row exists (live or deleted):
+    // a deploy-time seed must not bring ivan back with a default password.
+    expect(created).toEqual([]);
+
+    const live = db
+      .prepare(
+        `SELECT username FROM users WHERE username = 'ivan' AND deleted_at IS NULL`,
+      )
+      .get();
+    expect(live).toBeUndefined();
+  });
+});
