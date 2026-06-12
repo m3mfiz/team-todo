@@ -562,6 +562,11 @@ select {
   background: var(--blue-tint);
   color: var(--blue);
 }
+.chip--progress {
+  background: var(--bg-soft);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ============================================================
    Inline editor
@@ -730,6 +735,56 @@ input[type='date']::-webkit-date-and-time-value {
 .editor__fact dd {
   margin: 0;
   color: var(--ink-2);
+}
+
+/* per-member completion of shared («Всем») tasks */
+.completion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--hairline);
+}
+.completion-list__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+.completion-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  min-width: 0;
+}
+.completion-row__name {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.completion-row__date {
+  color: var(--gray-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.completion-dot {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gray-2);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: border-color 150ms var(--ease), background-color 150ms var(--ease);
+}
+.completion-dot--done {
+  border-color: var(--check);
+  background: var(--check);
 }
 
 /* ============================================================

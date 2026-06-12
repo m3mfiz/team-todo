@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeGroups } from '../grouping';
+import { computeGroups, toViewTasks } from '../grouping';
 import { todayKey, addDays } from '../dates';
 import type { Task } from '../types';
 
@@ -118,5 +118,110 @@ describe('computeGroups — logbook', () => {
     const groups = computeGroups('logbook', tasks, NONE);
     expect(groups.map((g) => g.key)).toEqual(['2026-05-20']);
     expect(allTaskIds(groups)).toEqual([1]);
+  });
+});
+
+describe('toViewTasks', () => {
+  const ME = 7;
+  const OTHER = 8;
+
+  function sharedTask(overrides: Partial<Task> & { id: number }): Task {
+    return makeTask({ assigneeId: null, assigneeName: null, ...overrides });
+  }
+
+  it('member: myCompleted shared task becomes done with HIS completion date', () => {
+    const myDate = '2026-06-10 09:30:00';
+    const raw = sharedTask({
+      id: 1,
+      status: 'open',
+      completedAt: null,
+      myCompleted: true,
+      completions: [
+        { userId: ME, displayName: 'Я', completedAt: myDate },
+        { userId: OTHER, displayName: 'Коллега', completedAt: '2026-06-11 10:00:00' },
+      ],
+    });
+    const [view] = toViewTasks([raw], { isAdmin: false, userId: ME });
+    expect(view.status).toBe('done');
+    expect(view.completedAt).toBe(myDate);
+    // raw completions/myCompleted preserved for the UI
+    expect(view.myCompleted).toBe(true);
+    expect(view.completions).toEqual(raw.completions);
+    // and it lands in HIS logbook under his date
+    const groups = computeGroups('logbook', [view], NONE);
+    expect(groups.map((g) => g.key)).toEqual(['2026-06-10']);
+  });
+
+  it('member: shared task without his mark stays open and untouched', () => {
+    const raw = sharedTask({
+      id: 2,
+      status: 'open',
+      myCompleted: false,
+      completions: [
+        { userId: OTHER, displayName: 'Коллега', completedAt: '2026-06-11 10:00:00' },
+      ],
+    });
+    const [view] = toViewTasks([raw], { isAdmin: false, userId: ME });
+    expect(view).toBe(raw); // same object — no changes
+    expect(view.status).toBe('open');
+  });
+
+  it('member: globally done shared task without his mark (admin force) uses global completedAt', () => {
+    const raw = sharedTask({
+      id: 3,
+      status: 'done',
+      completedAt: '2026-06-09 18:00:00',
+      myCompleted: false,
+      completions: [],
+    });
+    const [view] = toViewTasks([raw], { isAdmin: false, userId: ME });
+    expect(view.status).toBe('done');
+    expect(view.completedAt).toBe('2026-06-09 18:00:00');
+  });
+
+  it('admin: tasks are returned unchanged even with completion marks', () => {
+    const raw = [
+      sharedTask({
+        id: 4,
+        status: 'open',
+        myCompleted: true,
+        completions: [
+          { userId: ME, displayName: 'Я', completedAt: '2026-06-10 09:30:00' },
+        ],
+      }),
+      makeTask({ id: 5, assigneeId: ME, assigneeName: 'Я', status: 'open' }),
+    ];
+    const view = toViewTasks(raw, { isAdmin: true, userId: 1 });
+    expect(view).toBe(raw);
+    expect(view[0].status).toBe('open'); // open until everyone is done
+  });
+
+  it('member: personal tasks are untouched regardless of status', () => {
+    const open = makeTask({ id: 6, assigneeId: ME, assigneeName: 'Я' });
+    const done = makeTask({
+      id: 7,
+      assigneeId: ME,
+      assigneeName: 'Я',
+      status: 'done',
+      completedAt: '2026-06-08 12:00:00',
+    });
+    const view = toViewTasks([open, done], { isAdmin: false, userId: ME });
+    expect(view[0]).toBe(open);
+    expect(view[1]).toBe(done);
+  });
+
+  it('does not mutate the input tasks', () => {
+    const raw = sharedTask({
+      id: 8,
+      status: 'open',
+      completedAt: null,
+      myCompleted: true,
+      completions: [
+        { userId: ME, displayName: 'Я', completedAt: '2026-06-10 09:30:00' },
+      ],
+    });
+    toViewTasks([raw], { isAdmin: false, userId: ME });
+    expect(raw.status).toBe('open');
+    expect(raw.completedAt).toBeNull();
   });
 });

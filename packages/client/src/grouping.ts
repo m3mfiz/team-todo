@@ -7,6 +7,35 @@ export interface Group {
   tasks: Task[];
 }
 
+// Map raw tasks into the current user's view-model.
+//
+// For a member, a shared task (assigneeId === null) is "done" as soon as HE
+// has marked it (myCompleted) — even while the global status is still 'open'
+// because teammates haven't finished. His logbook date is his own mark date
+// (taken from completions), falling back to the global completedAt when the
+// task was force-completed by the admin without his mark.
+//
+// Admins (and personal tasks for everyone) see raw global status untouched.
+// completions/myCompleted are preserved as-is so the UI can render raw data.
+export function toViewTasks(
+  tasks: Task[],
+  opts: { isAdmin: boolean; userId: number },
+): Task[] {
+  if (opts.isAdmin) return tasks;
+  return tasks.map((t) => {
+    if (t.assigneeId !== null) return t; // personal task — untouched
+    const globallyDone = t.status === 'done';
+    if (!t.myCompleted && !globallyDone) return t;
+    const own = t.completions?.find((c) => c.userId === opts.userId);
+    const ownDate = t.myCompleted ? (own?.completedAt ?? null) : null;
+    return {
+      ...t,
+      status: 'done',
+      completedAt: ownDate ?? t.completedAt,
+    };
+  });
+}
+
 export function computeGroups(
   tab: TabKey,
   tasks: Task[],

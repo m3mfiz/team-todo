@@ -50,6 +50,10 @@ export function TaskRow({
   const assigneeLabel = task.assigneeId === null ? null : task.assigneeName;
   const creatorLabel = !isOwner ? task.creatorName : null;
 
+  // Shared-task progress for the admin: N marks of M living members.
+  const memberCount = members.filter((m) => m.role === 'member').length;
+  const completionCount = task.completions?.length ?? 0;
+
   return (
     <div className={`taskrow${expanded ? ' taskrow--expanded' : ''}${leaving ? ' taskrow--leaving' : ''}`}>
       <div className="taskrow__main">
@@ -93,6 +97,12 @@ export function TaskRow({
               <span className="chip chip--all">Всем</span>
             )}
 
+            {task.assigneeId === null && isAdmin && memberCount > 0 && (
+              <span className="chip chip--progress">
+                {completionCount} из {memberCount}
+              </span>
+            )}
+
             {showAssigneeMeta && assigneeLabel && task.assigneeId !== null && (
               <span className="taskrow__person">для {assigneeLabel}</span>
             )}
@@ -122,6 +132,64 @@ export function TaskRow({
 function firstLine(notes: string): string {
   const line = notes.split('\n')[0].trim();
   return line.length > 80 ? `${line.slice(0, 80)}…` : line;
+}
+
+// «Выполнение» — per-member marks on a shared task. Rows come from the
+// members list (admin has it); completion entries of users missing from that
+// list (e.g. a member viewer, whose members prop is empty) are merged in so
+// the block stays informative for everyone — the data is open.
+function CompletionList({
+  task,
+  members,
+}: {
+  task: Task;
+  members: User[];
+}): JSX.Element | null {
+  if (task.assigneeId !== null) return null;
+  const completions = task.completions ?? [];
+  const byUser = new Map(completions.map((c) => [c.userId, c]));
+
+  const rows = members
+    .filter((m) => m.role === 'member')
+    .map((m) => ({
+      userId: m.id,
+      displayName: m.displayName,
+      completedAt: byUser.get(m.id)?.completedAt ?? null,
+    }));
+  const known = new Set(rows.map((r) => r.userId));
+  for (const c of completions) {
+    if (!known.has(c.userId)) {
+      rows.push({
+        userId: c.userId,
+        displayName: c.displayName,
+        completedAt: c.completedAt,
+      });
+    }
+  }
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'));
+
+  return (
+    <div className="completion-list" aria-label="Выполнение">
+      <span className="completion-list__label">Выполнение</span>
+      {rows.map((r) => (
+        <div className="completion-row" key={r.userId}>
+          <span
+            className={`completion-dot${r.completedAt ? ' completion-dot--done' : ''}`}
+            aria-hidden="true"
+          >
+            {r.completedAt && <CheckMark size={11} />}
+          </span>
+          <span className="completion-row__name">{r.displayName}</span>
+          {r.completedAt && (
+            <span className="completion-row__date">
+              {formatDeadlineShort(r.completedAt.slice(0, 10))}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 interface TaskEditorProps {
@@ -211,6 +279,7 @@ function TaskEditor({
             <dd>{task.creatorName}</dd>
           </div>
         </dl>
+        <CompletionList task={task} members={members} />
       </div>
     );
   }
@@ -272,6 +341,8 @@ function TaskEditor({
           </label>
         )}
       </div>
+
+      <CompletionList task={task} members={members} />
 
       <div className="editor__actions">
         <button

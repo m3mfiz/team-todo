@@ -21,6 +21,12 @@ interface TaskRow {
   assignee_name: string | null;
 }
 
+interface CompletionJson {
+  userId: number;
+  displayName: string;
+  completedAt: string;
+}
+
 interface TaskJson {
   id: number;
   title: string;
@@ -34,6 +40,10 @@ interface TaskJson {
   creatorName: string;
   assigneeId: number | null;
   assigneeName: string | null;
+  // Present only on everyone-tasks (assignee_id IS NULL): per-member marks of
+  // live members and whether the current user has marked the task done.
+  completions?: CompletionJson[];
+  myCompleted?: boolean;
 }
 
 const SELECT_BASE = `
@@ -70,6 +80,77 @@ function toTaskJson(row: TaskRow): TaskJson {
     assigneeId: row.assignee_id,
     assigneeName: row.assignee_name,
   };
+}
+
+interface CompletionRow {
+  task_id: number;
+  user_id: number;
+  display_name: string;
+  completed_at: string;
+}
+
+// Marks of live members only: soft-deleted users keep their rows in
+// task_completions, but they never count towards (or show up in) completions.
+const COMPLETION_USER_FILTER = `u.deleted_at IS NULL AND u.role = 'member'`;
+
+function completionsByTask(
+  db: DB,
+  taskIds: number[],
+): Map<number, CompletionJson[]> {
+  const map = new Map<number, CompletionJson[]>();
+  if (taskIds.length === 0) {
+    return map;
+  }
+  const placeholders = taskIds.map(() => '?').join(', ');
+  const rows = db
+    .prepare(
+      `SELECT
+         tc.task_id      AS task_id,
+         tc.user_id      AS user_id,
+         u.display_name  AS display_name,
+         tc.completed_at AS completed_at
+       FROM task_completions tc
+       JOIN users u ON u.id = tc.user_id
+       WHERE tc.task_id IN (${placeholders})
+         AND ${COMPLETION_USER_FILTER}
+       ORDER BY u.display_name ASC, tc.user_id ASC`,
+    )
+    .all(...taskIds) as CompletionRow[];
+
+  for (const row of rows) {
+    const list = map.get(row.task_id) ?? [];
+    list.push({
+      userId: row.user_id,
+      displayName: row.display_name,
+      completedAt: row.completed_at,
+    });
+    map.set(row.task_id, list);
+  }
+  return map;
+}
+
+// Everyone-tasks carry completions + myCompleted; personal tasks stay as-is.
+function enrichTaskJson(
+  row: TaskRow,
+  user: CurrentUser,
+  completions: CompletionJson[],
+): TaskJson {
+  if (row.assignee_id !== null) {
+    return toTaskJson(row);
+  }
+  return {
+    ...toTaskJson(row),
+    completions,
+    myCompleted: completions.some((c) => c.userId === user.id),
+  };
+}
+
+function enrichSingleTask(db: DB, row: TaskRow, user: CurrentUser): TaskJson {
+  if (row.assignee_id !== null) {
+    return toTaskJson(row);
+  }
+  const completions = completionsByTask(db, [row.id]).get(row.id) ?? [];
+  return enrichTaskJson(row, user, completions);
 }
 
 function getTaskRow(db: DB, id: number): TaskRow | undefined {
@@ -119,7 +200,14 @@ export function listTasks(db: DB, user: CurrentUser): TaskJson[] {
       )
       .all({ uid: user.id }) as TaskRow[];
   }
-  return rows.map(toTaskJson);
+  // One extra query for all everyone-tasks in the list, grouped in JS.
+  const everyoneIds = rows
+    .filter((row) => row.assignee_id === null)
+    .map((row) => row.id);
+  const byTask = completionsByTask(db, everyoneIds);
+  return rows.map((row) =>
+    enrichTaskJson(row, user, byTask.get(row.id) ?? []),
+  );
 }
 
 // Only live users are valid assignees; soft-deleted ones count as missing.
@@ -181,7 +269,46 @@ export function createTask(
 
   const row = getTaskRow(db, Number(info.lastInsertRowid));
   // Row was just inserted; guaranteed to exist.
-  return toTaskJson(row as TaskRow);
+  return enrichSingleTask(db, row as TaskRow, user);
+}
+
+// True when every live member (role='member', deleted_at IS NULL) has a mark
+// on the task. An empty team never auto-completes anything.
+function allLiveMembersCompleted(db: DB, taskId: number): boolean {
+  const counts = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN tc.id IS NULL THEN 1 ELSE 0 END) AS missing
+       FROM users u
+       LEFT JOIN task_completions tc
+         ON tc.user_id = u.id AND tc.task_id = ?
+       WHERE ${COMPLETION_USER_FILTER}`,
+    )
+    .get(taskId) as { total: number; missing: number | null };
+  return counts.total > 0 && (counts.missing ?? 0) === 0;
+}
+
+// Sweep after team membership changes (e.g. soft-delete): an open everyone-task
+// whose remaining live members have all marked it flips to done. Already-done
+// tasks are never reopened by membership changes — the flip happens only at
+// mark-time or in this sweep.
+export function recomputeEveryoneTasksAfterUserChange(db: DB): void {
+  const openEveryone = db
+    .prepare(
+      `SELECT id FROM tasks WHERE assignee_id IS NULL AND status = 'open'`,
+    )
+    .all() as Array<{ id: number }>;
+  for (const task of openEveryone) {
+    if (allLiveMembersCompleted(db, task.id)) {
+      db.prepare(
+        `UPDATE tasks
+         SET status = 'done', completed_at = datetime('now'),
+             updated_at = datetime('now')
+         WHERE id = ?`,
+      ).run(task.id);
+    }
+  }
 }
 
 interface UpdateTaskPatch {
@@ -246,6 +373,57 @@ export function updateTask(
     }
   }
 
+  // Everyone-task + member changing status: the status patch is interpreted as
+  // a personal mark, not a global flip. 'done' records the mark and completes
+  // the task globally only once every live member has marked it; 'open'
+  // removes the mark and reopens a globally-done task (including one
+  // force-completed by an admin — deliberate for a 5-person team). Admin
+  // status changes stay global and never touch the marks.
+  const statusAsPersonalMark =
+    patch.status !== undefined &&
+    row.assignee_id === null &&
+    user.role === 'member';
+
+  if (statusAsPersonalMark) {
+    const applyMark = db.transaction(() => {
+      if (patch.status === 'done') {
+        db.prepare(
+          `INSERT OR IGNORE INTO task_completions (task_id, user_id)
+           VALUES (?, ?)`,
+        ).run(id, user.id);
+        if (allLiveMembersCompleted(db, id)) {
+          db.prepare(
+            `UPDATE tasks
+             SET status = 'done', completed_at = datetime('now'),
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+          ).run(id);
+        } else {
+          db.prepare(
+            `UPDATE tasks SET updated_at = datetime('now') WHERE id = ?`,
+          ).run(id);
+        }
+      } else {
+        db.prepare(
+          `DELETE FROM task_completions WHERE task_id = ? AND user_id = ?`,
+        ).run(id, user.id);
+        if (row.status === 'done') {
+          db.prepare(
+            `UPDATE tasks
+             SET status = 'open', completed_at = NULL,
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+          ).run(id);
+        } else {
+          db.prepare(
+            `UPDATE tasks SET updated_at = datetime('now') WHERE id = ?`,
+          ).run(id);
+        }
+      }
+    });
+    applyMark();
+  }
+
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
 
@@ -265,7 +443,7 @@ export function updateTask(
     sets.push('assignee_id = @assigneeId');
     params.assigneeId = patch.assigneeId;
   }
-  if (patch.status !== undefined) {
+  if (patch.status !== undefined && !statusAsPersonalMark) {
     sets.push('status = @status');
     params.status = patch.status;
     if (patch.status === 'done') {
@@ -275,12 +453,17 @@ export function updateTask(
     }
   }
 
-  sets.push("updated_at = datetime('now')");
-
-  db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  // A pure personal-mark patch already bumped updated_at inside the
+  // transaction; skip the redundant generic UPDATE.
+  if (sets.length > 0 || !statusAsPersonalMark) {
+    sets.push("updated_at = datetime('now')");
+    db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = @id`).run(
+      params,
+    );
+  }
 
   const updated = getTaskRow(db, id);
-  return toTaskJson(updated as TaskRow);
+  return enrichSingleTask(db, updated as TaskRow, user);
 }
 
 export function deleteTask(db: DB, user: CurrentUser, id: number): void {

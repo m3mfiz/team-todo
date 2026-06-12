@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import type { DB } from '../db/index.ts';
 import { AppError } from '../utils/errors.ts';
 import { hashPassword } from '../utils/password.ts';
+import { recomputeEveryoneTasksAfterUserChange } from './task.service.ts';
 
 export interface PublicUser {
   id: number;
@@ -91,6 +92,10 @@ export function softDeleteUser(
        WHERE user_id = ? AND revoked_at IS NULL`,
     ).run(row.id);
     db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(row.id);
+    // Completeness of everyone-tasks is computed over live members only, so
+    // removing a member can make an open everyone-task complete: sweep now,
+    // in the same transaction.
+    recomputeEveryoneTasksAfterUserChange(db);
   });
   softDelete();
 }

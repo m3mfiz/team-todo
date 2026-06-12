@@ -134,7 +134,10 @@ describe('tasks', () => {
     expect(reopen.json().completedAt).toBeNull();
   });
 
-  it('maria can complete an everyone-task', async () => {
+  // Per-member completion contract: a member's 'done' on an everyone-task
+  // records a personal mark (myCompleted), while the global status honestly
+  // stays 'open' until every live member has marked it.
+  it('maria can complete an everyone-task: myCompleted true, global stays open', async () => {
     const created = await createTask(admin.accessToken, {
       title: 'Everyone to complete',
       assigneeId: null,
@@ -148,7 +151,11 @@ describe('tasks', () => {
       payload: { status: 'done' },
     });
     expect(done.statusCode).toBe(200);
-    expect(done.json().status).toBe('done');
+    expect(done.json().status).toBe('open');
+    expect(done.json().completedAt).toBeNull();
+    expect(done.json().myCompleted).toBe(true);
+    const completions = done.json().completions as Array<{ userId: number }>;
+    expect(completions.some((c) => c.userId === maria.user.id)).toBe(true);
   });
 
   it('assignee cannot edit title of admin-created task but can complete it', async () => {

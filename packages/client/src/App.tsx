@@ -15,6 +15,7 @@ import { AddSheet } from './components/AddSheet';
 import { UsersScreen } from './components/UsersScreen';
 import { PlusIcon } from './icons';
 import { todayKey } from './dates';
+import { toViewTasks } from './grouping';
 import {
   ensurePushSubscription,
   getPushSupport,
@@ -211,6 +212,36 @@ export default function App(): JSX.Element {
       });
       if (expandedId === task.id) setExpandedId(null);
 
+      // For a member completing a shared task, optimistically record HIS mark
+      // (myCompleted + completions) instead of the global status — the global
+      // status flips only when everyone is done (server decides).
+      const me = user;
+      const sharedAsMember =
+        me !== null && me.role === 'member' && task.assigneeId === null;
+      const snapshot = tasks.find((t) => t.id === task.id);
+      if (sharedAsMember && me) {
+        const nowIso = new Date().toISOString();
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== task.id) return t;
+            const others = (t.completions ?? []).filter(
+              (c) => c.userId !== me.id,
+            );
+            const completions = [
+              ...others,
+              {
+                userId: me.id,
+                displayName: me.displayName,
+                completedAt: nowIso,
+              },
+            ].sort((a, b) =>
+              a.displayName.localeCompare(b.displayName, 'ru'),
+            );
+            return { ...t, myCompleted: true, completions };
+          }),
+        );
+      }
+
       // Fire PATCH immediately (optimistic).
       void (async () => {
         try {
@@ -219,7 +250,12 @@ export default function App(): JSX.Element {
             prev.map((t) => (t.id === task.id ? updated : t)),
           );
         } catch {
-          // rollback: drop from leaving so it stays open
+          // rollback: restore optimistic mark and drop from leaving
+          if (sharedAsMember && snapshot) {
+            setTasks((prev) =>
+              prev.map((t) => (t.id === task.id ? snapshot : t)),
+            );
+          }
           setLeavingIds((prev) => {
             const next = new Set(prev);
             next.delete(task.id);
@@ -240,23 +276,45 @@ export default function App(): JSX.Element {
       }, COMPLETE_LINGER_MS);
       leaveTimers.current.set(task.id, timerId);
     },
-    [expandedId],
+    [expandedId, tasks, user],
   );
 
-  const handleReopen = useCallback(async (task: Task) => {
-    // optimistic
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === task.id ? { ...t, status: 'open', completedAt: null } : t,
-      ),
-    );
-    try {
-      const updated = await api.updateTask(task.id, { status: 'open' });
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
-    } catch {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
-    }
-  }, []);
+  const handleReopen = useCallback(
+    async (task: Task) => {
+      const me = user;
+      const sharedAsMember =
+        me !== null && me.role === 'member' && task.assigneeId === null;
+      // raw snapshot for rollback (the incoming task is a view-task)
+      const snapshot = tasks.find((t) => t.id === task.id);
+      // optimistic
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== task.id) return t;
+          if (sharedAsMember && me) {
+            return {
+              ...t,
+              status: 'open',
+              completedAt: null,
+              myCompleted: false,
+              completions: (t.completions ?? []).filter(
+                (c) => c.userId !== me.id,
+              ),
+            };
+          }
+          return { ...t, status: 'open', completedAt: null };
+        }),
+      );
+      try {
+        const updated = await api.updateTask(task.id, { status: 'open' });
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+      } catch {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === task.id ? (snapshot ?? task) : t)),
+        );
+      }
+    },
+    [tasks, user],
+  );
 
   const handleSave = useCallback(
     async (id: number, input: UpdateTaskInput) => {
@@ -306,15 +364,19 @@ export default function App(): JSX.Element {
   const isAdmin = user.role === 'admin';
   const members = users;
 
+  // Map raw tasks to the current user's view-model (member sees a shared task
+  // as done once HE marked it, with his own completion date).
+  const viewTasks = toViewTasks(tasks, { isAdmin, userId: user.id });
+
   // Apply admin assignee filter (client-side).
   const visibleTasks =
     isAdmin && assigneeFilter !== 'all'
-      ? tasks.filter((t) =>
+      ? viewTasks.filter((t) =>
           assigneeFilter === 'shared'
             ? t.assigneeId === null
             : t.assigneeId === assigneeFilter,
         )
-      : tasks;
+      : viewTasks;
 
   const today = todayKey();
   const counts: Record<TabKey, number> = {

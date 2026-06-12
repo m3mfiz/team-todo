@@ -64,7 +64,16 @@ export function migrate(db: DB): void {
       UNIQUE(task_id, user_id, kind)
     );
 
+    CREATE TABLE IF NOT EXISTS task_completions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_id, user_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
+    CREATE INDEX IF NOT EXISTS idx_task_completions_task ON task_completions(task_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_creator ON tasks(creator_id);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);

@@ -21,6 +21,13 @@ export interface AdminCreateUserInput {
 
 export type TaskStatus = 'open' | 'done';
 
+// Per-user completion mark on a shared («Всем») task.
+export interface TaskCompletion {
+  userId: number;
+  displayName: string;
+  completedAt: string;
+}
+
 export interface Task {
   id: number;
   title: string;
@@ -34,6 +41,11 @@ export interface Task {
   creatorName: string;
   assigneeId: number | null; // null = «всем»
   assigneeName: string | null;
+  // Only present on shared tasks (assigneeId === null):
+  // marks of living members, sorted by displayName.
+  completions?: TaskCompletion[];
+  // Only present on shared tasks: does the current user have a mark.
+  myCompleted?: boolean;
 }
 
 export interface CreateTaskInput {
