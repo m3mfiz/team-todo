@@ -1,7 +1,7 @@
 export type Role = 'admin' | 'member';
 
 export interface User {
-  id: string;
+  id: number;
   username: string;
   displayName: string;
   role: Role;
@@ -16,7 +16,7 @@ export interface Session {
 export type TaskStatus = 'open' | 'done';
 
 export interface Task {
-  id: string;
+  id: number;
   title: string;
   notes: string | null;
   deadline: string | null; // 'YYYY-MM-DD' | null
@@ -24,9 +24,9 @@ export interface Task {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  creatorId: string;
+  creatorId: number;
   creatorName: string;
-  assigneeId: string | null; // null = «всем»
+  assigneeId: number | null; // null = «всем»
   assigneeName: string | null;
 }
 
@@ -34,14 +34,14 @@ export interface CreateTaskInput {
   title: string;
   notes?: string | null;
   deadline?: string | null;
-  assigneeId?: string | null;
+  assigneeId?: number | null;
 }
 
 export interface UpdateTaskInput {
   title?: string;
   notes?: string | null;
   deadline?: string | null;
-  assigneeId?: string | null;
+  assigneeId?: number | null;
   status?: TaskStatus;
 }
 

@@ -19,7 +19,7 @@ export function AddSheet({
   const [notes, setNotes] = useState('');
   const [deadline, setDeadline] = useState('');
   // Default: «Себе» -> currentUser.id
-  const [assignee, setAssignee] = useState<string>(currentUser.id);
+  const [assignee, setAssignee] = useState<string>(String(currentUser.id));
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -43,7 +43,7 @@ export function AddSheet({
     if (notes.trim()) input.notes = notes.trim();
     if (deadline) input.deadline = deadline;
     if (isAdmin) {
-      input.assigneeId = assignee === 'all' ? null : assignee;
+      input.assigneeId = assignee === 'all' ? null : Number(assignee);
     }
     try {
       await onCreate(input);

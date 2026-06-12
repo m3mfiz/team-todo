@@ -199,11 +199,11 @@ export const api = {
     return request<Task>('/tasks', { method: 'POST', body: input });
   },
 
-  updateTask(id: string, input: UpdateTaskInput): Promise<Task> {
+  updateTask(id: number, input: UpdateTaskInput): Promise<Task> {
     return request<Task>(`/tasks/${id}`, { method: 'PATCH', body: input });
   },
 
-  deleteTask(id: string): Promise<void> {
+  deleteTask(id: number): Promise<void> {
     return request<void>(`/tasks/${id}`, { method: 'DELETE' });
   },
 };

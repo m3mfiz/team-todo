@@ -33,12 +33,12 @@ export default function App(): JSX.Element {
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tab, setTab] = useState<TabKey>('today');
-  const [assigneeFilter, setAssigneeFilter] = useState<string>('all'); // admin client-side filter
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState<'all' | 'shared' | number>('all'); // admin client-side filter
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [leavingIds, setLeavingIds] = useState<Set<string>>(new Set());
+  const [leavingIds, setLeavingIds] = useState<Set<number>>(new Set());
 
-  const leaveTimers = useRef<Map<string, number>>(new Map());
+  const leaveTimers = useRef<Map<number, number>>(new Map());
 
   // --- Session bootstrap -----------------------------------------------------
   const goToLogin = useCallback(() => {
@@ -204,7 +204,7 @@ export default function App(): JSX.Element {
   }, []);
 
   const handleSave = useCallback(
-    async (id: string, input: UpdateTaskInput) => {
+    async (id: number, input: UpdateTaskInput) => {
       const updated = await api.updateTask(id, input);
       setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
       setExpandedId(null);
@@ -212,7 +212,7 @@ export default function App(): JSX.Element {
     [],
   );
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleDelete = useCallback(async (id: number) => {
     const snapshot = tasks;
     setTasks((prev) => prev.filter((t) => t.id !== id));
     setExpandedId(null);
@@ -231,7 +231,7 @@ export default function App(): JSX.Element {
     [],
   );
 
-  const toggleExpand = useCallback((id: string) => {
+  const toggleExpand = useCallback((id: number) => {
     setExpandedId((cur) => (cur === id ? null : id));
   }, []);
 

@@ -8,11 +8,11 @@ interface TaskRowProps {
   currentUser: User;
   members: User[];
   expanded: boolean;
-  onToggleExpand: (id: string) => void;
+  onToggleExpand: (id: number) => void;
   onComplete: (task: Task) => void; // open -> done (deferred removal handled by parent timing)
   onReopen: (task: Task) => void; // done -> open
-  onSave: (id: string, input: UpdateTaskInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSave: (id: number, input: UpdateTaskInput) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
   // When set, this row is in its "leaving" animation window after completion.
   leaving?: boolean;
 }
@@ -130,8 +130,8 @@ interface TaskEditorProps {
   canEdit: boolean;
   members: User[];
   onCancel: () => void;
-  onSave: (id: string, input: UpdateTaskInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSave: (id: number, input: UpdateTaskInput) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
 }
 
 function TaskEditor({
@@ -148,7 +148,7 @@ function TaskEditor({
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   // 'all' sentinel maps to assigneeId === null
   const [assignee, setAssignee] = useState<string>(
-    task.assigneeId === null ? 'all' : task.assigneeId,
+    task.assigneeId === null ? 'all' : String(task.assigneeId),
   );
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -167,7 +167,7 @@ function TaskEditor({
       deadline: deadline ? deadline : null,
     };
     if (isAdmin) {
-      input.assigneeId = assignee === 'all' ? null : assignee;
+      input.assigneeId = assignee === 'all' ? null : Number(assignee);
     }
     try {
       await onSave(task.id, input);

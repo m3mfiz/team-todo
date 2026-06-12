@@ -38,11 +38,16 @@ export async function login(
     .prepare('SELECT * FROM users WHERE username = ?')
     .get(username) as UserRow | undefined;
   if (!user) {
+    // Equalize timing with the found-user path to avoid username enumeration.
+    await verifyPassword(password, DUMMY_HASH);
     return null;
   }
   const ok = await verifyPassword(password, user.password_hash);
   return ok ? user : null;
 }
+
+// bcrypt(10) of a throwaway string; only used to burn comparable time above.
+const DUMMY_HASH = '$2a$10$2t0Ok6qQ5hcWflALuKiS1uTTzM0GIP0w.biLK5TvG7rls4J6ogyvS';
 
 export function storeRefreshToken(
   db: DB,

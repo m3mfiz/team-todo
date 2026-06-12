@@ -32,6 +32,14 @@ const dbPath = rawDbPath.startsWith('/')
   ? rawDbPath
   : new URL(rawDbPath, repoRoot).pathname;
 
+// In production a forgotten ADMIN_PASSWORD must not silently seed a default.
+if (
+  process.env.NODE_ENV === 'production' &&
+  (process.env.ADMIN_PASSWORD === undefined || process.env.ADMIN_PASSWORD === '')
+) {
+  throw new Error('ADMIN_PASSWORD is required in production');
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 3002),
   jwtSecret,

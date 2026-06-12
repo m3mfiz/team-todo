@@ -197,4 +197,29 @@ describe('tasks', () => {
 
     expect(await listTaskIds(admin.accessToken)).not.toContain(taskId);
   });
+
+  // Contract lock: assigneeId must be a JSON number. A string id (e.g. a raw
+  // <select>.value passed through by a client) must be rejected, not coerced.
+  it('rejects string assigneeId with 400 on create and update', async () => {
+    const asString = await createTask(admin.accessToken, {
+      title: 'String id must fail',
+      assigneeId: String(ivan.user.id),
+    });
+    expect(asString.statusCode).toBe(400);
+
+    const created = await createTask(admin.accessToken, {
+      title: 'Patch target',
+      assigneeId: ivan.user.id,
+    });
+    expect(created.statusCode).toBe(201);
+    const taskId = created.json().id as number;
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/tasks/${taskId}`,
+      headers: authHeader(admin.accessToken),
+      payload: { assigneeId: String(maria.user.id) },
+    });
+    expect(patched.statusCode).toBe(400);
+  });
 });

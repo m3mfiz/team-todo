@@ -8,13 +8,13 @@ interface TaskListProps {
   tasks: Task[]; // already filtered by assignee (admin filter) — full set for section computation
   currentUser: User;
   members: User[];
-  expandedId: string | null;
-  leavingIds: Set<string>;
-  onToggleExpand: (id: string) => void;
+  expandedId: number | null;
+  leavingIds: Set<number>;
+  onToggleExpand: (id: number) => void;
   onComplete: (task: Task) => void;
   onReopen: (task: Task) => void;
-  onSave: (id: string, input: UpdateTaskInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSave: (id: number, input: UpdateTaskInput) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
 }
 
 interface Group {
@@ -73,7 +73,7 @@ export function TaskList(props: TaskListProps): JSX.Element {
   );
 }
 
-function computeGroups(tab: TabKey, tasks: Task[], leaving: Set<string>): Group[] {
+function computeGroups(tab: TabKey, tasks: Task[], leaving: Set<number>): Group[] {
   const today = todayKey();
 
   if (tab === 'today') {
