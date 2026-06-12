@@ -15,6 +15,7 @@ import { registerAuthRoutes } from './routes/auth.ts';
 import { registerUserRoutes } from './routes/users.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
 import { registerPushRoutes } from './routes/push.ts';
+import { registerAdminRoutes } from './routes/admin.ts';
 import { initPush } from './services/push.service.ts';
 import { startReminderCron } from './services/reminder-cron.ts';
 
@@ -62,6 +63,7 @@ export async function buildApp(
   registerUserRoutes(app, db);
   registerTaskRoutes(app, db);
   registerPushRoutes(app, db);
+  registerAdminRoutes(app, db);
 
   // Configure web push (silent no-op if VAPID keys are absent/invalid).
   initPush(app.log);

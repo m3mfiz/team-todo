@@ -69,4 +69,13 @@ export function migrate(db: DB): void {
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   `);
+
+  // SQLite has no ADD COLUMN IF NOT EXISTS — probe via PRAGMA table_info so the
+  // migration stays idempotent on databases created before soft-delete existed.
+  const userColumns = db
+    .prepare('PRAGMA table_info(users)')
+    .all() as Array<{ name: string }>;
+  if (!userColumns.some((column) => column.name === 'deleted_at')) {
+    db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT');
+  }
 }

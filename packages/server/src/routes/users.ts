@@ -15,7 +15,7 @@ export function registerUserRoutes(app: FastifyInstance, db: DB): void {
     async () => {
       const rows = db
         .prepare(
-          'SELECT id, username, display_name, role FROM users ORDER BY role DESC, display_name ASC',
+          'SELECT id, username, display_name, role FROM users WHERE deleted_at IS NULL ORDER BY role DESC, display_name ASC',
         )
         .all() as UserListRow[];
       return rows.map((u) => ({

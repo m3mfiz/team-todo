@@ -12,6 +12,7 @@ import { Login } from './components/Login';
 import { TabBar } from './components/TabBar';
 import { TaskList } from './components/TaskList';
 import { AddSheet } from './components/AddSheet';
+import { UsersScreen } from './components/UsersScreen';
 import { PlusIcon } from './icons';
 import { todayKey } from './dates';
 import {
@@ -33,6 +34,7 @@ const POLL_MS = 30000;
 const PUSH_DISMISSED_KEY = 'team-todo-push-dismissed';
 
 type Phase = 'loading' | 'login' | 'ready';
+type View = 'tasks' | 'users';
 
 export default function App(): JSX.Element {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -40,6 +42,7 @@ export default function App(): JSX.Element {
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tab, setTab] = useState<TabKey>('today');
+  const [view, setView] = useState<View>('tasks');
   const [assigneeFilter, setAssigneeFilter] = useState<'all' | 'shared' | number>('all'); // admin client-side filter
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -53,6 +56,7 @@ export default function App(): JSX.Element {
     setUser(null);
     setUsers([]);
     setTasks([]);
+    setView('tasks');
     setPhase('login');
   }, []);
 
@@ -101,6 +105,19 @@ export default function App(): JSX.Element {
     try {
       const t = await api.tasks();
       setTasks(t);
+    } catch {
+      /* ignore; session-lost handled by api */
+    }
+  }, []);
+
+  const refetchUsers = useCallback(async () => {
+    try {
+      const u = await api.users();
+      setUsers(u);
+      // a deleted user may have been the active assignee filter — reset it
+      setAssigneeFilter((cur) =>
+        typeof cur === 'number' && !u.some((m) => m.id === cur) ? 'all' : cur,
+      );
     } catch {
       /* ignore; session-lost handled by api */
     }
@@ -315,20 +332,45 @@ export default function App(): JSX.Element {
     <div className="app">
       <header className="header">
         <div className="header__top">
-          <h1 className="header__title">{TAB_TITLES[tab]}</h1>
+          <h1 className="header__title">
+            {view === 'users' ? 'Сотрудники' : TAB_TITLES[tab]}
+          </h1>
           <div className="header__user">
-            <span className="header__name">{user.displayName}</span>
-            <button
-              type="button"
-              className="header__logout"
-              onClick={() => void handleLogout()}
-            >
-              Выйти
-            </button>
+            {view === 'users' ? (
+              <button
+                type="button"
+                className="header__done"
+                onClick={() => setView('tasks')}
+              >
+                Готово
+              </button>
+            ) : (
+              <>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="header__name header__name--btn"
+                    onClick={() => setView('users')}
+                    aria-label="Управление пользователями"
+                  >
+                    {user.displayName}
+                  </button>
+                ) : (
+                  <span className="header__name">{user.displayName}</span>
+                )}
+                <button
+                  type="button"
+                  className="header__logout"
+                  onClick={() => void handleLogout()}
+                >
+                  Выйти
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {isAdmin && (
+        {view === 'tasks' && isAdmin && (
           <div className="segmented" role="tablist" aria-label="Фильтр по исполнителю">
             <button
               type="button"
@@ -358,7 +400,7 @@ export default function App(): JSX.Element {
         )}
       </header>
 
-      {showPushBanner && (
+      {view === 'tasks' && showPushBanner && (
         <div className="push-banner" role="region" aria-label="Уведомления">
           <span className="push-banner__text">
             Включайте уведомления о новых задачах и сроках
@@ -382,39 +424,52 @@ export default function App(): JSX.Element {
       )}
 
       <main className="content">
-        <TaskList
-          tab={tab}
-          tasks={visibleTasks}
-          currentUser={user}
-          members={members}
-          expandedId={expandedId}
-          leavingIds={leavingIds}
-          onToggleExpand={toggleExpand}
-          onComplete={handleComplete}
-          onReopen={handleReopen}
-          onSave={handleSave}
-          onDelete={handleDelete}
-        />
+        {view === 'users' ? (
+          <UsersScreen
+            currentUser={user}
+            users={users}
+            onUsersChanged={refetchUsers}
+            onTasksChanged={refetch}
+          />
+        ) : (
+          <TaskList
+            tab={tab}
+            tasks={visibleTasks}
+            currentUser={user}
+            members={members}
+            expandedId={expandedId}
+            leavingIds={leavingIds}
+            onToggleExpand={toggleExpand}
+            onComplete={handleComplete}
+            onReopen={handleReopen}
+            onSave={handleSave}
+            onDelete={handleDelete}
+          />
+        )}
       </main>
 
-      <button
-        type="button"
-        className="fab"
-        onClick={() => setShowAdd(true)}
-        aria-label="Новая задача"
-      >
-        <PlusIcon size={28} />
-      </button>
+      {view === 'tasks' && (
+        <>
+          <button
+            type="button"
+            className="fab"
+            onClick={() => setShowAdd(true)}
+            aria-label="Новая задача"
+          >
+            <PlusIcon size={28} />
+          </button>
 
-      <TabBar active={tab} onChange={setTab} counts={counts} />
+          <TabBar active={tab} onChange={setTab} counts={counts} />
 
-      {showAdd && (
-        <AddSheet
-          currentUser={user}
-          members={members}
-          onClose={() => setShowAdd(false)}
-          onCreate={handleCreate}
-        />
+          {showAdd && (
+            <AddSheet
+              currentUser={user}
+              members={members}
+              onClose={() => setShowAdd(false)}
+              onCreate={handleCreate}
+            />
+          )}
+        </>
       )}
     </div>
   );

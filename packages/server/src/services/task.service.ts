@@ -122,8 +122,11 @@ export function listTasks(db: DB, user: CurrentUser): TaskJson[] {
   return rows.map(toTaskJson);
 }
 
+// Only live users are valid assignees; soft-deleted ones count as missing.
 function userExists(db: DB, id: number): boolean {
-  const row = db.prepare('SELECT 1 FROM users WHERE id = ?').get(id);
+  const row = db
+    .prepare('SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL')
+    .get(id);
   return row !== undefined;
 }
 

@@ -13,6 +13,12 @@ export interface Session {
   user: User;
 }
 
+export interface AdminCreateUserInput {
+  username: string;
+  displayName: string;
+  password: string;
+}
+
 export type TaskStatus = 'open' | 'done';
 
 export interface Task {

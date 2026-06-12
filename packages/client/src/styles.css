@@ -916,6 +916,274 @@ input[type='date']::-webkit-date-and-time-value {
 }
 
 /* ============================================================
+   Users screen (admin)
+   ============================================================ */
+/* admin: the header name becomes a tappable entry into user management */
+.header__name--btn {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--blue);
+  text-align: right;
+  /* expanded hit area (~44px) without disturbing the header layout */
+  padding: 12px 6px;
+  margin: -12px -6px;
+  border-radius: 8px;
+  transition: background-color 150ms var(--ease), opacity 150ms var(--ease);
+}
+.header__name--btn:active {
+  background: var(--bg-soft);
+}
+
+.header__done {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 6px;
+  margin: -12px -6px;
+  border-radius: 8px;
+  transition: background-color 150ms var(--ease), opacity 150ms var(--ease);
+}
+.header__done:active {
+  background: var(--bg-soft);
+  opacity: 0.7;
+}
+
+.users-screen {
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+}
+.users-screen__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-row {
+  border-bottom: 0.5px solid var(--hairline);
+  padding: 6px 0;
+}
+.user-row:last-child {
+  border-bottom: none;
+}
+.user-row__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+.user-row__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.user-row__name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.user-row__name {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-row__login {
+  font-size: 13px;
+  color: var(--gray);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip--role {
+  background: var(--blue-tint);
+  color: var(--blue);
+  flex: 0 0 auto;
+}
+.user-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.user-row__pass-btn {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  transition: background-color 150ms var(--ease);
+}
+.user-row__pass-btn:active {
+  background: var(--bg-soft);
+}
+.user-row__trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--gray);
+  padding: 8px 10px;
+  border-radius: 9px;
+  transition: color 150ms var(--ease), background-color 150ms var(--ease);
+}
+.user-row__trash--confirm {
+  color: var(--overdue);
+  background: rgba(255, 59, 48, 0.1);
+}
+.user-row__trash:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.user-row__trash-text {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* inline panel under a row (change password) */
+.user-row__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 0 12px;
+  animation: editorIn 180ms var(--ease);
+}
+.user-row__panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.user-row__saved {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--check);
+  padding: 0 0 10px;
+}
+
+.inline-error {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--overdue);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+.users-input {
+  border: 1px solid var(--hairline);
+  background: var(--bg-elev);
+  border-radius: 10px;
+  padding: 11px 12px;
+  /* >=16px: inputs below 16px trigger auto-zoom on focus in iOS Safari */
+  font-size: 16px;
+  outline: none;
+  width: 100%;
+  min-height: 44px;
+  transition: border-color 150ms var(--ease);
+}
+.users-input:focus {
+  border-color: var(--blue);
+}
+
+/* password input with inline show/hide toggle */
+.pass-field {
+  position: relative;
+  display: flex;
+}
+.pass-field__input {
+  padding-right: 92px;
+}
+.pass-field__toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.users-screen__add {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 2px;
+  margin-top: 8px;
+  min-height: 44px;
+  border-radius: 9px;
+  transition: opacity 150ms var(--ease);
+}
+.users-screen__add:active {
+  opacity: 0.6;
+}
+
+/* inline "add user" form */
+.users-form {
+  margin-top: 12px;
+  background: var(--bg-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: editorIn 180ms var(--ease);
+}
+.users-form__title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.users-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.users-form__label {
+  font-size: 12px;
+  color: var(--gray);
+  margin-left: 2px;
+}
+.users-form__success {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--check);
+}
+.users-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* ============================================================
    Desktop refinement
    ============================================================ */
 @media (min-width: 700px) {

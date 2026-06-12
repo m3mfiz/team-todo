@@ -10,6 +10,7 @@ export interface UserRow {
   display_name: string;
   role: 'admin' | 'member';
   created_at: string;
+  deleted_at: string | null;
 }
 
 const REFRESH_TTL_DAYS = 7;
@@ -23,10 +24,12 @@ function expiresAtIso(days: number): string {
   return new Date(ms).toISOString();
 }
 
+// Soft-deleted users are treated as non-existent: auth/me and the refresh
+// re-read both resolve to 401 for them.
 export function getUserById(db: DB, id: number): UserRow | undefined {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
-    | UserRow
-    | undefined;
+  return db
+    .prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL')
+    .get(id) as UserRow | undefined;
 }
 
 export async function login(
@@ -35,7 +38,7 @@ export async function login(
   password: string,
 ): Promise<UserRow | null> {
   const user = db
-    .prepare('SELECT * FROM users WHERE username = ?')
+    .prepare('SELECT * FROM users WHERE username = ? AND deleted_at IS NULL')
     .get(username) as UserRow | undefined;
   if (!user) {
     // Equalize timing with the found-user path to avoid username enumeration.

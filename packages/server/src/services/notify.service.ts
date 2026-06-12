@@ -21,10 +21,11 @@ interface NewTaskInput {
   creatorId: number;
 }
 
+// "Everyone" never includes soft-deleted users.
 function allUserIds(db: DB): number[] {
-  const rows = db.prepare('SELECT id FROM users ORDER BY id ASC').all() as Array<{
-    id: number;
-  }>;
+  const rows = db
+    .prepare('SELECT id FROM users WHERE deleted_at IS NULL ORDER BY id ASC')
+    .all() as Array<{ id: number }>;
   return rows.map((r) => r.id);
 }
 

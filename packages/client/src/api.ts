@@ -1,4 +1,5 @@
 import type {
+  AdminCreateUserInput,
   CreateTaskInput,
   Session,
   Task,
@@ -205,6 +206,22 @@ export const api = {
 
   deleteTask(id: number): Promise<void> {
     return request<void>(`/tasks/${id}`, { method: 'DELETE' });
+  },
+
+  // --- Admin: user management ---
+  adminCreateUser(input: AdminCreateUserInput): Promise<User> {
+    return request<User>('/admin/users', { method: 'POST', body: input });
+  },
+
+  adminDeleteUser(id: number): Promise<{ ok: true }> {
+    return request<{ ok: true }>(`/admin/users/${id}`, { method: 'DELETE' });
+  },
+
+  adminSetPassword(id: number, password: string): Promise<{ ok: true }> {
+    return request<{ ok: true }>(`/admin/users/${id}/password`, {
+      method: 'POST',
+      body: { password },
+    });
   },
 
   vapidPublicKey(): Promise<{ publicKey: string | null }> {
