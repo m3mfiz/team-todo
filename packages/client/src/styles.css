@@ -15,8 +15,11 @@
   --layers: #34c2c8;   /* Все задачи */
   --check: #34c759;    /* Журнал */
 
+  color-scheme: light;
+
   --bg: #ffffff;
   --bg-soft: #f7f7f8;
+  --bg-elev: #ffffff;
   --ink: #1c1c1e;
   --ink-2: #3a3a3c;
   --gray: #8e8e93;
@@ -24,6 +27,8 @@
   --hairline: rgba(60, 60, 67, 0.16);
   --checkbox-border: #c7c7cc;
   --overdue: #ff3b30;
+  --header-bg: rgba(255, 255, 255, 0.86);
+  --tabbar-bg: rgba(255, 255, 255, 0.9);
 
   --radius: 13px;
   --col-max: 640px;
@@ -35,6 +40,28 @@
     'Helvetica Neue', 'Segoe UI', Roboto, system-ui, sans-serif;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Dark mode — Things-style true black (iOS) / dark gray surfaces */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --blue-press: #5a96f7;
+    --blue-tint: rgba(59, 130, 246, 0.22);
+
+    --bg: #000000;
+    --bg-soft: #1c1c1e;
+    --bg-elev: #1c1c1e;
+    --ink: #ffffff;
+    --ink-2: #ebebf0;
+    --gray: #8e8e93;
+    --gray-2: #636366;
+    --hairline: rgba(84, 84, 88, 0.65);
+    --checkbox-border: #48484a;
+    --header-bg: rgba(0, 0, 0, 0.8);
+    --tabbar-bg: rgba(12, 12, 13, 0.88);
+  }
 }
 
 * {
@@ -53,6 +80,31 @@ body {
   line-height: 1.35;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* iOS: keep the authored size in landscape; no automatic inflation */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  /* standalone-app feel: no scroll chaining / rubber-band over the shell */
+  overscroll-behavior-y: contain;
+}
+
+/* keyboard accessibility without disturbing touch */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Respect reduced-motion (Apple HIG / Material accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 #root {
@@ -183,7 +235,7 @@ select {
 }
 .login__input:focus {
   border-color: var(--blue);
-  background: #fff;
+  background: var(--bg-elev);
 }
 .login__error {
   background: rgba(255, 59, 48, 0.1);
@@ -220,7 +272,7 @@ select {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--header-bg);
   backdrop-filter: saturate(180%) blur(18px);
   -webkit-backdrop-filter: saturate(180%) blur(18px);
 }
@@ -376,6 +428,13 @@ select {
 .checkbox:hover {
   border-color: var(--blue);
 }
+/* invisible hit-area extension: 28px visual -> 44px touch target */
+.checkbox::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
 .checkbox__fill {
   display: grid;
   place-items: center;
@@ -485,7 +544,7 @@ select {
 }
 .editor__title {
   border: none;
-  background: #fff;
+  background: var(--bg-elev);
   border-radius: 10px;
   padding: 11px 12px;
   font-size: 16px;
@@ -501,10 +560,11 @@ select {
 }
 .editor__notes {
   border: 1px solid var(--hairline);
-  background: #fff;
+  background: var(--bg-elev);
   border-radius: 10px;
   padding: 10px 12px;
-  font-size: 15px;
+  /* >=16px: inputs below 16px trigger auto-zoom on focus in iOS Safari */
+  font-size: 16px;
   outline: none;
   resize: vertical;
   min-height: 44px;
@@ -530,10 +590,11 @@ select {
 .editor__date,
 .editor__select {
   border: 1px solid var(--hairline);
-  background: #fff;
+  background: var(--bg-elev);
   border-radius: 10px;
   padding: 10px 11px;
-  font-size: 15px;
+  /* >=16px: inputs below 16px trigger auto-zoom on focus in iOS Safari */
+  font-size: 16px;
   outline: none;
   width: 100%;
   color: var(--ink);
@@ -659,7 +720,7 @@ select {
   margin: 0 auto;
   height: calc(var(--tabbar-h) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--tabbar-bg);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--hairline);
@@ -689,7 +750,7 @@ select {
   transform: translateY(-1px);
 }
 .tab__label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -740,7 +801,7 @@ select {
 .sheet {
   width: 100%;
   max-width: var(--col-max);
-  background: #fff;
+  background: var(--bg-elev);
   border-radius: 20px 20px 0 0;
   padding: 10px 20px calc(20px + var(--safe-bottom));
   display: flex;

@@ -38,12 +38,18 @@ export default defineConfig({
         mode: nodeMajor < 20 ? 'development' : 'production',
       },
       manifest: {
+        id: '/',
+        start_url: '/',
+        scope: '/',
         name: 'Задачи команды',
         short_name: 'Задачи',
+        description: 'Командный таск-менеджер: задачи для команды из 5 человек',
         lang: 'ru',
+        dir: 'ltr',
         display: 'standalone',
         background_color: '#ffffff',
-        theme_color: '#3b82f6',
+        theme_color: '#ffffff',
+        categories: ['productivity'],
         icons: [
           {
             src: '/icons/icon-192.png',
@@ -56,6 +62,18 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
+          },
+          {
+            src: '/icons/icon-192-maskable.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
+            src: '/icons/icon-512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },
