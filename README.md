@@ -39,23 +39,10 @@ npm run typecheck           # tsc --noEmit для обоих пакетов
 npm run build               # production-сборка клиента
 ```
 
-## Продакшен (хост 138.16.178.200, ask4k.live)
+## Продакшен
 
 Работает рядом с lab-booking (:3001) на том же хосте: PM2-процесс
 `team-todo`, порт **3002**, SQLite-файл в `data/` (в git не входит).
-
-### Первичная установка
-
-```bash
-ssh -i ~/.ssh/id_ed25519_github m3mfis@138.16.178.200
-git clone git@github.com:m3mfiz/team-todo.git ~/team-todo
-cd ~/team-todo
-cp .env.example .env && nano .env   # реальные секреты, ADMIN_PASSWORD
-npm install
-npm run db:setup
-npm run build
-pm2 start ecosystem.config.cjs && pm2 save
-```
 
 ### Caddy
 
@@ -68,7 +55,7 @@ todo.ask4k.live {
 ```
 
 и `caddy reload`. (Альтернатива без поддомена — path-маршрут
-`handle_path /todo/*` внутри блока `ask4k.live`, тогда клиенту нужен
+`handle_path /todo/*` внутри блока, тогда клиенту нужен
 `base: '/todo/'` в vite.config.ts; вариант с поддоменом предпочтительнее.)
 
 ### Деплой новой версии (одной командой)
