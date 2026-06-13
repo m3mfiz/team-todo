@@ -73,11 +73,6 @@ todo.ask4k.live {
 
 ### Деплой новой версии (одной командой)
 
-```bash
-ssh -i ~/.ssh/id_ed25519_github m3mfis@138.16.178.200 \
-  'cd ~/team-todo && git pull --ff-only && npm install && npm run db:setup && npm run build && pm2 restart team-todo --update-env'
-```
-
 `db:setup` идемпотентен (CREATE TABLE IF NOT EXISTS / сид пропускает
 существующих пользователей) — безопасен при каждом деплое.
 
