@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskRow } from '../components/TaskRow';
+import { formatDeadlineShort } from '../dates';
 import type { Task, UpdateTaskInput, User } from '../types';
 
 const admin: User = {
@@ -366,6 +367,37 @@ describe('TaskRow — reopen confirmation (A3)', () => {
 
     fireEvent.click(checkbox);
     expect(onReopen).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskRow editor — redesigned card anatomy', () => {
+  it('renders the title exactly once when expanded', () => {
+    renderExpanded(makeTask(), admin);
+    expect(screen.getAllByText('Купить молоко')).toHaveLength(1);
+  });
+
+  it('shows no Сохранить/Отмена bar in clean view mode', () => {
+    renderExpanded(makeTask(), admin);
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отмена' })).toBeNull();
+  });
+
+  it('deadline chip opens WhenSheet for admin', () => {
+    renderExpanded(makeTask({ deadline: '2026-06-20' }), admin);
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
+    expect(screen.getByRole('dialog', { name: 'Срок' })).toBeTruthy();
+  });
+
+  it('deadline chip is non-interactive for a member', () => {
+    renderExpanded(makeTask({ deadline: '2026-06-20' }), member);
+    expect(screen.queryByRole('button', { name: 'Редактировать срок' })).toBeNull();
+    expect(screen.getByText(formatDeadlineShort('2026-06-20'))).toBeTruthy();
+  });
+
+  it('renders nothing for empty notes when the viewer cannot edit', () => {
+    renderExpanded(makeTask({ notes: null, creatorId: 1 }), member);
+    expect(screen.queryByRole('button', { name: 'Редактировать заметки' })).toBeNull();
+    expect(screen.queryByText('Добавить заметки…')).toBeNull();
   });
 });
 

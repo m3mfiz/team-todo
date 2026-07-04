@@ -115,48 +115,52 @@ export function TaskRow({
           onClick={handleBodyClick}
         >
           <span className="taskrow__title-row">
-            <span className={`taskrow__title${checked ? ' taskrow__title--done' : ''}`}>
-              {highlightMatch(task.title, highlightQuery)}
-            </span>
+            {!expanded && (
+              <span className={`taskrow__title${checked ? ' taskrow__title--done' : ''}`}>
+                {highlightMatch(task.title, highlightQuery)}
+              </span>
+            )}
             {confirmReopen && (
               <span className="taskrow__confirm-label">Вернуть?</span>
             )}
           </span>
 
-          <span className="taskrow__meta">
-            {task.notes && (
-              <span className="taskrow__notes">{firstLine(task.notes)}</span>
-            )}
+          {!expanded && (
+            <span className="taskrow__meta">
+              {task.notes && (
+                <span className="taskrow__notes">{firstLine(task.notes)}</span>
+              )}
 
-            {task.deadline && !isDone && (
-              <span
-                className={`chip chip--date${isOverdue(task.deadline) ? ' chip--overdue' : ''}`}
-              >
-                {isOverdue(task.deadline)
-                  ? `Просрочено · ${formatDeadlineShort(task.deadline)}`
-                  : formatDeadlineShort(task.deadline)}
-              </span>
-            )}
+              {task.deadline && !isDone && (
+                <span
+                  className={`chip chip--date${isOverdue(task.deadline) ? ' chip--overdue' : ''}`}
+                >
+                  {isOverdue(task.deadline)
+                    ? `Просрочено · ${formatDeadlineShort(task.deadline)}`
+                    : formatDeadlineShort(task.deadline)}
+                </span>
+              )}
 
-            {task.assigneeId === null && memberCount > 0 && (
-              <span className="chip chip--all chip--pie">
-                <PieIcon fraction={completionCount / memberCount} />
-                Всем · {completionCount} из {memberCount}
-              </span>
-            )}
+              {task.assigneeId === null && memberCount > 0 && (
+                <span className="chip chip--all chip--pie">
+                  <PieIcon fraction={completionCount / memberCount} />
+                  Всем · {completionCount} из {memberCount}
+                </span>
+              )}
 
-            {task.assigneeId === null && memberCount === 0 && (
-              <span className="chip chip--all">Всем</span>
-            )}
+              {task.assigneeId === null && memberCount === 0 && (
+                <span className="chip chip--all">Всем</span>
+              )}
 
-            {showAssigneeMeta && assigneeLabel && task.assigneeId !== null && (
-              <span className="taskrow__person">для {assigneeLabel}</span>
-            )}
+              {showAssigneeMeta && assigneeLabel && task.assigneeId !== null && (
+                <span className="taskrow__person">для {assigneeLabel}</span>
+              )}
 
-            {showAssigneeMeta && creatorLabel && (
-              <span className="taskrow__person">от {creatorLabel}</span>
-            )}
-          </span>
+              {showAssigneeMeta && creatorLabel && (
+                <span className="taskrow__person">от {creatorLabel}</span>
+              )}
+            </span>
+          )}
         </button>
       </div>
 
@@ -230,23 +234,29 @@ function CompletionList({
   rows.sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'));
 
   return (
-    <div className="completion-list" aria-label="Выполнение">
-      <span className="completion-list__label">Выполнение</span>
+    <div className="completion-line" aria-label="Выполнение">
       {rows.map((r) => (
-        <div className="completion-row" key={r.userId}>
+        <span
+          className="completion-chip"
+          key={r.userId}
+          title={
+            r.completedAt
+              ? `Выполнено ${formatDeadlineShort(r.completedAt.slice(0, 10))}`
+              : undefined
+          }
+        >
           <span
             className={`completion-dot${r.completedAt ? ' completion-dot--done' : ''}`}
             aria-hidden="true"
           >
-            {r.completedAt && <CheckMark size={11} />}
+            {r.completedAt && <CheckMark size={10} />}
           </span>
-          <span className="completion-row__name">{r.displayName}</span>
-          {r.completedAt && (
-            <span className="completion-row__date">
-              {formatDeadlineShort(r.completedAt.slice(0, 10))}
-            </span>
-          )}
-        </div>
+          <span
+            className={`completion-chip__name${r.completedAt ? '' : ' completion-chip__name--pending'}`}
+          >
+            {r.displayName}
+          </span>
+        </span>
       ))}
     </div>
   );
@@ -383,10 +393,11 @@ function TaskDetail({
     }
   }
 
-  // Deadline display value
-  const deadlineDisplay = draftDeadline
+  // Deadline chip label — placeholder word when there is no deadline yet
+  const deadlineChipLabel = draftDeadline
     ? formatDeadlineShort(draftDeadline)
-    : 'Нет';
+    : 'Срок';
+  const deadlineOverdue = Boolean(draftDeadline) && isOverdue(draftDeadline);
 
   // Assignee display value
   const assigneeDisplay =
@@ -400,31 +411,116 @@ function TaskDetail({
 
   return (
     <div className="editor editor--view">
-      {/* ── Title row (duplicated inside expanded area for tap-to-edit) ── */}
-      {canEdit ? (
-        activeField === 'title' ? (
-          <input
-            ref={titleInputRef}
-            autoFocus
-            className="editor__title"
-            type="text"
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-            placeholder="Название"
-          />
-        ) : (
+      {/* ── Header: the one title, plus delete in the top-right corner ── */}
+      <div className="editor__header">
+        <div className="editor__header-title">
+          {canEdit ? (
+            activeField === 'title' ? (
+              <input
+                ref={titleInputRef}
+                autoFocus
+                className="editor__title"
+                type="text"
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                placeholder="Название"
+              />
+            ) : (
+              <button
+                type="button"
+                className="editor__field-tap editor__title-view"
+                onClick={() =>
+                  activateField('title', () => titleInputRef.current?.focus())
+                }
+                aria-label="Редактировать название"
+              >
+                {draftTitle || <span className="editor__placeholder">Название</span>}
+              </button>
+            )
+          ) : (
+            <span className="editor__title-static">{task.title}</span>
+          )}
+        </div>
+
+        {canEdit && (
           <button
             type="button"
-            className="editor__field-tap editor__title-view"
-            onClick={() =>
-              activateField('title', () => titleInputRef.current?.focus())
-            }
-            aria-label="Редактировать название"
+            className={`editor__trash${confirmDelete ? ' editor__trash--confirm' : ''}`}
+            onClick={handleDelete}
+            disabled={saving}
+            aria-label="Удалить задачу"
           >
-            {draftTitle || <span className="editor__placeholder">Название</span>}
+            <TrashIcon size={17} />
+            {confirmDelete && (
+              <span className="editor__trash-text">Удалить?</span>
+            )}
           </button>
-        )
-      ) : null}
+        )}
+      </div>
+
+      {/* ── Chips: deadline, assignee, creator ── */}
+      <div className="chips-row">
+        {isAdmin && canEdit ? (
+          <button
+            type="button"
+            className={`card-chip card-chip--tap${deadlineOverdue ? ' card-chip--overdue' : ''}${draftDeadline ? '' : ' card-chip--empty'}`}
+            onClick={() => setShowWhenSheet(true)}
+            aria-label="Редактировать срок"
+          >
+            {deadlineChipLabel}
+          </button>
+        ) : (
+          draftDeadline && (
+            <span
+              className={`card-chip${deadlineOverdue ? ' card-chip--overdue' : ''}`}
+            >
+              {formatDeadlineShort(draftDeadline)}
+            </span>
+          )
+        )}
+
+        {isAdmin && canEdit ? (
+          activeField === 'assignee' ? (
+            <select
+              ref={selectRef}
+              autoFocus
+              className="card-chip card-chip--select"
+              value={draftAssignee}
+              onChange={(e) => {
+                setDraftAssignee(e.target.value);
+                setActiveField(null);
+              }}
+              onBlur={() => setActiveField(null)}
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.displayName}
+                </option>
+              ))}
+              <option value="all">Всем</option>
+            </select>
+          ) : (
+            <button
+              type="button"
+              className="card-chip card-chip--tap"
+              onClick={() =>
+                activateField('assignee', () => selectRef.current?.focus())
+              }
+              aria-label="Редактировать исполнителя"
+            >
+              {assigneeDisplay}
+            </button>
+          )
+        ) : (
+          <span className="card-chip">
+            {task.assigneeId === null ? 'Всем' : task.assigneeName}
+          </span>
+        )}
+
+        {task.creatorName && (
+          <span className="chip-creator">от {task.creatorName}</span>
+        )}
+      </div>
 
       {/* ── Notes ── */}
       {canEdit ? (
@@ -460,128 +556,29 @@ function TaskDetail({
         )
       )}
 
-      {/* ── Facts block ── */}
-      <dl className="editor__facts">
-        {/* Срок */}
-        <div className="editor__fact">
-          <dt>Срок</dt>
-          <dd>
-            {isAdmin && canEdit ? (
-              <button
-                type="button"
-                className="editor__field-tap editor__fact-value"
-                onClick={() => setShowWhenSheet(true)}
-                aria-label="Редактировать срок"
-              >
-                {deadlineDisplay}
-              </button>
-            ) : (
-              <span className="editor__fact-value">
-                {task.deadline ? formatDeadlineShort(task.deadline) : 'Нет'}
-              </span>
-            )}
-          </dd>
-        </div>
-
-        {/* Кому */}
-        <div className="editor__fact">
-          <dt>Кому</dt>
-          <dd>
-            {isAdmin && canEdit ? (
-              activeField === 'assignee' ? (
-                <select
-                  ref={selectRef}
-                  autoFocus
-                  className="editor__select editor__select--inline"
-                  value={draftAssignee}
-                  onChange={(e) => {
-                    setDraftAssignee(e.target.value);
-                    setActiveField(null);
-                  }}
-                  onBlur={() => setActiveField(null)}
-                >
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.displayName}
-                    </option>
-                  ))}
-                  <option value="all">Всем</option>
-                </select>
-              ) : (
-                <button
-                  type="button"
-                  className="editor__field-tap editor__fact-value"
-                  onClick={() =>
-                    activateField('assignee', () => selectRef.current?.focus())
-                  }
-                  aria-label="Редактировать исполнителя"
-                >
-                  {assigneeDisplay}
-                </button>
-              )
-            ) : (
-              <span className="editor__fact-value">
-                {task.assigneeId === null ? 'Всем' : task.assigneeName}
-              </span>
-            )}
-          </dd>
-        </div>
-
-        {/* От кого */}
-        {task.creatorName ? (
-          <div className="editor__fact">
-            <dt>От кого</dt>
-            <dd>
-              <span className="editor__fact-value">{task.creatorName}</span>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-
       {/* ── Completion block for shared tasks ── */}
       <CompletionList task={task} members={members} />
 
-      {/* ── Actions: trash + Save/Cancel ── */}
+      {/* ── Actions: Save/Cancel, only while there is something to act on ── */}
       {saveError && <div className="inline-error">{saveError}</div>}
-      {(showActions || canEdit) && (
+      {showActions && (
         <div className="editor__actions">
-          {canEdit ? (
-            <button
-              type="button"
-              className={`editor__trash${confirmDelete ? ' editor__trash--confirm' : ''}`}
-              onClick={handleDelete}
-              disabled={saving}
-              aria-label="Удалить задачу"
-            >
-              <TrashIcon size={19} />
-              {confirmDelete && (
-                <span className="editor__trash-text">Удалить?</span>
-              )}
-            </button>
-          ) : (
-            <span />
-          )}
-
-          {showActions && (
-            <div className="editor__actions-right">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={handleCancel}
-                disabled={saving}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => void handleSave()}
-                disabled={saving || !draftTitle.trim() || !isDirty}
-              >
-                Сохранить
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={handleCancel}
+            disabled={saving}
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => void handleSave()}
+            disabled={saving || !draftTitle.trim() || !isDirty}
+          >
+            Сохранить
+          </button>
         </div>
       )}
 
