@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import type { TabKey } from '../types';
-import { CalendarIcon, CheckCircleIcon, LayersIcon, StarIcon } from '../icons';
+import { TAB_ICON } from '../tabs';
 
 interface TabBarProps {
   active: TabKey;
@@ -11,15 +11,13 @@ interface TabBarProps {
 interface TabDef {
   key: TabKey;
   label: string;
-  icon: JSX.Element;
-  colorVar: string;
 }
 
 const TABS: TabDef[] = [
-  { key: 'today', label: 'Сегодня', icon: <StarIcon size={25} />, colorVar: 'var(--star)' },
-  { key: 'upcoming', label: 'Предстоящие', icon: <CalendarIcon size={25} />, colorVar: 'var(--cal)' },
-  { key: 'all', label: 'Все задачи', icon: <LayersIcon size={25} />, colorVar: 'var(--layers)' },
-  { key: 'logbook', label: 'Журнал', icon: <CheckCircleIcon size={25} />, colorVar: 'var(--check)' },
+  { key: 'today', label: 'Сегодня' },
+  { key: 'upcoming', label: 'Предстоящие' },
+  { key: 'all', label: 'Все задачи' },
+  { key: 'logbook', label: 'Журнал' },
 ];
 
 export function TabBar({ active, onChange, counts }: TabBarProps): JSX.Element {
@@ -28,17 +26,18 @@ export function TabBar({ active, onChange, counts }: TabBarProps): JSX.Element {
       {TABS.map((tab) => {
         const isActive = tab.key === active;
         const count = counts[tab.key];
+        const { icon: Icon, colorVar } = TAB_ICON[tab.key];
         return (
           <button
             key={tab.key}
             type="button"
             className={`tab${isActive ? ' tab--active' : ''}`}
-            style={isActive ? { color: tab.colorVar } : undefined}
+            style={isActive ? { color: colorVar } : undefined}
             onClick={() => onChange(tab.key)}
             aria-current={isActive ? 'page' : undefined}
           >
-            <span className="tab__icon" style={{ color: tab.colorVar }}>
-              {tab.icon}
+            <span className="tab__icon" style={{ color: colorVar }}>
+              <Icon size={25} />
               {count > 0 && tab.key !== 'logbook' && (
                 <span className="tab__badge">{count}</span>
               )}

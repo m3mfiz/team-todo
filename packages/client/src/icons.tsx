@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-interface IconProps {
+export interface IconProps {
   size?: number;
   className?: string;
 }
@@ -91,6 +91,42 @@ export function TrashIcon({ size = 20 }: IconProps): JSX.Element {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+// Quick Find — thin-line magnifier, matches TrashIcon's stroke weight
+export function SearchIcon({ size = 20 }: IconProps): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M20 20l-4.35-4.35" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Things-style progress pie for shared-task completion (0..1 fraction).
+export function PieIcon({ fraction, size = 16 }: { fraction: number; size?: number }): JSX.Element {
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const r = 6.5;
+  const c = 2 * Math.PI * r;
+  const dash = c * clamped;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth="2.4" opacity="0.28" />
+      {clamped > 0 && (
+        <circle
+          cx="8"
+          cy="8"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+          transform="rotate(-90 8 8)"
+        />
+      )}
     </svg>
   );
 }

@@ -13,7 +13,7 @@ import { TabBar } from './components/TabBar';
 import { TaskList } from './components/TaskList';
 import { AddSheet } from './components/AddSheet';
 import { UsersScreen } from './components/UsersScreen';
-import { PlusIcon } from './icons';
+import { PlusIcon, SearchIcon } from './icons';
 import { todayKey } from './dates';
 import { toViewTasks } from './grouping';
 import {
@@ -47,6 +47,8 @@ export default function App(): JSX.Element {
   const [assigneeFilter, setAssigneeFilter] = useState<'all' | 'shared' | number>('all'); // admin client-side filter
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [leavingIds, setLeavingIds] = useState<Set<number>>(new Set());
   const [showPushBanner, setShowPushBanner] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -60,6 +62,8 @@ export default function App(): JSX.Element {
     setTasks([]);
     setView('tasks');
     setLoadError(false);
+    setShowSearch(false);
+    setSearchQuery('');
     setPhase('login');
   }, []);
 
@@ -71,12 +75,14 @@ export default function App(): JSX.Element {
   const loadInitial = useCallback(async (me: User) => {
     setUser(me);
     setPhase('ready');
+    // /api/users is open to any authenticated user — the roster is needed
+    // by every role now (Progress Pie totals for shared tasks), not just
+    // the admin's user-management screen. It's fetched independently: tasks
+    // are the critical path (loadError gates on them alone), and the Pie
+    // already degrades to the plain «Всем» chip when the roster is empty.
+    void api.users().then(setUsers).catch(() => undefined);
     try {
-      const [u, t] = await Promise.all([
-        me.role === 'admin' ? api.users() : Promise.resolve<User[]>([]),
-        api.tasks(),
-      ]);
-      if (me.role === 'admin') setUsers(u);
+      const t = await api.tasks();
       setTasks(t);
       setLoadError(false);
     } catch {
@@ -136,7 +142,7 @@ export default function App(): JSX.Element {
     function schedule(): void {
       timer = window.setTimeout(async () => {
         if (document.visibilityState === 'visible') {
-          await refetch();
+          await Promise.all([refetch(), refetchUsers()]);
         }
         schedule();
       }, POLL_MS);
@@ -144,7 +150,10 @@ export default function App(): JSX.Element {
     schedule();
 
     function onVisible(): void {
-      if (document.visibilityState === 'visible') void refetch();
+      if (document.visibilityState === 'visible') {
+        void refetch();
+        void refetchUsers();
+      }
     }
     document.addEventListener('visibilitychange', onVisible);
 
@@ -152,7 +161,7 @@ export default function App(): JSX.Element {
       if (timer) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [phase, refetch]);
+  }, [phase, refetch, refetchUsers]);
 
   // --- Push notifications setup ---------------------------------------------
   useEffect(() => {
@@ -372,6 +381,15 @@ export default function App(): JSX.Element {
     setExpandedId((cur) => (cur === id ? null : id));
   }, []);
 
+  const collapseExpanded = useCallback(() => {
+    setExpandedId(null);
+  }, []);
+
+  const handleCancelSearch = useCallback(() => {
+    setShowSearch(false);
+    setSearchQuery('');
+  }, []);
+
   const handleRetryLoad = useCallback(() => {
     if (user) void loadInitial(user);
   }, [user, loadInitial]);
@@ -406,6 +424,12 @@ export default function App(): JSX.Element {
         )
       : viewTasks;
 
+  // Quick Find searches globally (Things-style) — bypass the assignee
+  // segmented filter while a query is active so admins don't get a subset
+  // of results without realizing it. Counts/badges stay on the filtered set.
+  const isSearching = showSearch && searchQuery.trim().length > 0;
+  const searchableTasks = isSearching ? viewTasks : visibleTasks;
+
   const today = todayKey();
   const counts: Record<TabKey, number> = {
     today: visibleTasks.filter(
@@ -436,6 +460,14 @@ export default function App(): JSX.Element {
               </button>
             ) : (
               <>
+                <button
+                  type="button"
+                  className="header__search-btn"
+                  onClick={() => setShowSearch(true)}
+                  aria-label="Поиск"
+                >
+                  <SearchIcon size={20} />
+                </button>
                 {isAdmin ? (
                   <button
                     type="button"
@@ -459,6 +491,26 @@ export default function App(): JSX.Element {
             )}
           </div>
         </div>
+
+        {view === 'tasks' && showSearch && (
+          <div className="search-bar">
+            <input
+              type="text"
+              className="search-bar__input"
+              placeholder="Поиск"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="search-bar__cancel"
+              onClick={handleCancelSearch}
+            >
+              Отмена
+            </button>
+          </div>
+        )}
 
         {view === 'tasks' && isAdmin && (
           <div className="segmented" role="tablist" aria-label="Фильтр по исполнителю">
@@ -513,6 +565,15 @@ export default function App(): JSX.Element {
         </div>
       )}
 
+      {view === 'tasks' && expandedId !== null && (
+        <button
+          type="button"
+          className="backdrop-dim"
+          onClick={collapseExpanded}
+          aria-label="Свернуть задачу"
+        />
+      )}
+
       <main className="content">
         {view === 'users' ? (
           <UsersScreen
@@ -535,11 +596,12 @@ export default function App(): JSX.Element {
         ) : (
           <TaskList
             tab={tab}
-            tasks={visibleTasks}
+            tasks={searchableTasks}
             currentUser={user}
             members={members}
             expandedId={expandedId}
             leavingIds={leavingIds}
+            searchQuery={showSearch ? searchQuery : undefined}
             onToggleExpand={toggleExpand}
             onComplete={handleComplete}
             onReopen={handleReopen}

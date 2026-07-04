@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { Task, UpdateTaskInput, User } from '../types';
 import { formatDeadlineShort, isOverdue } from '../dates';
-import { CheckMark, TrashIcon } from '../icons';
+import { CheckMark, PieIcon, TrashIcon } from '../icons';
+import { WhenSheet } from './WhenSheet';
+
+const REOPEN_CONFIRM_MS = 2500;
 
 interface TaskRowProps {
   task: Task;
@@ -15,6 +18,8 @@ interface TaskRowProps {
   onDelete: (id: number) => Promise<void>;
   // When set, this row is in its "leaving" animation window after completion.
   leaving?: boolean;
+  // Active Quick Find query — highlights the matched substring in the title.
+  highlightQuery?: string;
 }
 
 export function TaskRow({
@@ -28,6 +33,7 @@ export function TaskRow({
   onSave,
   onDelete,
   leaving,
+  highlightQuery,
 }: TaskRowProps): JSX.Element {
   const isAdmin = currentUser.role === 'admin';
   const isOwner = currentUser.id === task.creatorId;
@@ -36,13 +42,44 @@ export function TaskRow({
 
   const checked = isDone || Boolean(leaving);
 
+  // Reopening a done task requires a second confirming tap within a short
+  // window — mirrors the existing delete-confirm pattern (protection against
+  // an accidental un-complete, à la Things).
+  const [confirmReopen, setConfirmReopen] = useState(false);
+  const confirmTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
+  function disarmReopen(): void {
+    if (confirmTimerRef.current) {
+      window.clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+    setConfirmReopen(false);
+  }
+
   function handleCheckbox(e: React.MouseEvent): void {
     e.stopPropagation();
     if (isDone) {
-      onReopen(task);
+      if (confirmReopen) {
+        disarmReopen();
+        onReopen(task);
+      } else {
+        setConfirmReopen(true);
+        confirmTimerRef.current = window.setTimeout(disarmReopen, REOPEN_CONFIRM_MS);
+      }
     } else if (!leaving) {
       onComplete(task);
     }
+  }
+
+  function handleBodyClick(): void {
+    if (confirmReopen) disarmReopen();
+    onToggleExpand(task.id);
   }
 
   // Meta line bits
@@ -50,16 +87,19 @@ export function TaskRow({
   const assigneeLabel = task.assigneeId === null ? null : task.assigneeName;
   const creatorLabel = !isOwner ? task.creatorName : null;
 
-  // Shared-task progress for the admin: N marks of M living members.
+  // Shared-task progress: N marks of M living members. Capped at memberCount
+  // so a transient roster/task poll lag can never render e.g. «3 из 2».
   const memberCount = members.filter((m) => m.role === 'member').length;
-  const completionCount = task.completions?.length ?? 0;
+  const rawCompletionCount = task.completions?.length ?? 0;
+  const completionCount =
+    memberCount > 0 ? Math.min(rawCompletionCount, memberCount) : rawCompletionCount;
 
   return (
     <div className={`taskrow${expanded ? ' taskrow--expanded' : ''}${leaving ? ' taskrow--leaving' : ''}`}>
       <div className="taskrow__main">
         <button
           type="button"
-          className={`checkbox${checked ? ' checkbox--checked' : ''}`}
+          className={`checkbox${checked ? ' checkbox--checked' : ''}${confirmReopen ? ' checkbox--confirm' : ''}`}
           onClick={handleCheckbox}
           aria-pressed={checked}
           aria-label={isDone ? 'Вернуть в работу' : 'Отметить выполненной'}
@@ -72,10 +112,15 @@ export function TaskRow({
         <button
           type="button"
           className="taskrow__body"
-          onClick={() => onToggleExpand(task.id)}
+          onClick={handleBodyClick}
         >
-          <span className={`taskrow__title${checked ? ' taskrow__title--done' : ''}`}>
-            {task.title}
+          <span className="taskrow__title-row">
+            <span className={`taskrow__title${checked ? ' taskrow__title--done' : ''}`}>
+              {highlightMatch(task.title, highlightQuery)}
+            </span>
+            {confirmReopen && (
+              <span className="taskrow__confirm-label">Вернуть?</span>
+            )}
           </span>
 
           <span className="taskrow__meta">
@@ -93,14 +138,15 @@ export function TaskRow({
               </span>
             )}
 
-            {task.assigneeId === null && (
-              <span className="chip chip--all">Всем</span>
+            {task.assigneeId === null && memberCount > 0 && (
+              <span className="chip chip--all chip--pie">
+                <PieIcon fraction={completionCount / memberCount} />
+                Всем · {completionCount} из {memberCount}
+              </span>
             )}
 
-            {task.assigneeId === null && isAdmin && memberCount > 0 && (
-              <span className="chip chip--progress">
-                {completionCount} из {memberCount}
-              </span>
+            {task.assigneeId === null && memberCount === 0 && (
+              <span className="chip chip--all">Всем</span>
             )}
 
             {showAssigneeMeta && assigneeLabel && task.assigneeId !== null && (
@@ -131,6 +177,21 @@ export function TaskRow({
 function firstLine(notes: string): string {
   const line = notes.split('\n')[0].trim();
   return line.length > 80 ? `${line.slice(0, 80)}…` : line;
+}
+
+// Wraps the first case-insensitive match of `query` in <mark> for Quick Find.
+function highlightMatch(text: string, query: string | undefined): JSX.Element {
+  const q = query?.trim();
+  if (!q) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="search-highlight">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
 }
 
 // «Выполнение» — per-member marks on a shared task. Rows come from the
@@ -228,10 +289,10 @@ function TaskDetail({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showWhenSheet, setShowWhenSheet] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const notesInputRef = useRef<HTMLTextAreaElement>(null);
-  const deadlineInputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
 
   // Task the drafts were last seeded from — the baseline for "did the user edit".
@@ -406,31 +467,14 @@ function TaskDetail({
           <dt>Срок</dt>
           <dd>
             {isAdmin && canEdit ? (
-              activeField === 'deadline' ? (
-                <input
-                  ref={deadlineInputRef}
-                  autoFocus
-                  className="editor__date editor__date--inline"
-                  type="date"
-                  value={draftDeadline}
-                  onChange={(e) => setDraftDeadline(e.target.value)}
-                  onBlur={() => setActiveField(null)}
-                  style={{ WebkitAppearance: 'none', appearance: 'none' }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="editor__field-tap editor__fact-value"
-                  onClick={() =>
-                    activateField('deadline', () =>
-                      deadlineInputRef.current?.focus(),
-                    )
-                  }
-                  aria-label="Редактировать срок"
-                >
-                  {deadlineDisplay}
-                </button>
-              )
+              <button
+                type="button"
+                className="editor__field-tap editor__fact-value"
+                onClick={() => setShowWhenSheet(true)}
+                aria-label="Редактировать срок"
+              >
+                {deadlineDisplay}
+              </button>
             ) : (
               <span className="editor__fact-value">
                 {task.deadline ? formatDeadlineShort(task.deadline) : 'Нет'}
@@ -539,6 +583,17 @@ function TaskDetail({
             </div>
           )}
         </div>
+      )}
+
+      {showWhenSheet && (
+        <WhenSheet
+          value={draftDeadline}
+          onApply={(next) => {
+            setDraftDeadline(next ?? '');
+            setShowWhenSheet(false);
+          }}
+          onClose={() => setShowWhenSheet(false)}
+        />
       )}
     </div>
   );

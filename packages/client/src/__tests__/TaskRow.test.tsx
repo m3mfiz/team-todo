@@ -5,7 +5,7 @@
 // Сохранить button send a no-op PATCH («пустой PATCH не уходит при
 // отсутствии изменений»).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskRow } from '../components/TaskRow';
 import type { Task, UpdateTaskInput, User } from '../types';
 
@@ -88,12 +88,13 @@ describe('TaskRow editor — no-op save guard', () => {
   it('does not call onSave when deadline/assignee are activated but unchanged (admin)', () => {
     const { onSave } = renderExpanded(makeTask({ deadline: '2026-06-20' }), admin);
 
+    // Open the «Срок» sheet without picking anything, then cancel it.
     fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
-    expect(saveButton().disabled).toBe(true);
-    fireEvent.click(saveButton());
+    expect(screen.getByRole('dialog', { name: 'Срок' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+    expect(screen.queryByRole('dialog', { name: 'Срок' })).toBeNull();
 
-    // Deactivate via blur, then activate assignee — still no changes.
-    fireEvent.blur(screen.getByDisplayValue('2026-06-20'));
+    // Activate assignee — still no changes anywhere.
     fireEvent.click(screen.getByRole('button', { name: 'Редактировать исполнителя' }));
     expect(saveButton().disabled).toBe(true);
     fireEvent.click(saveButton());
@@ -246,7 +247,8 @@ describe('TaskRow editor — draft re-sync on concurrent updates', () => {
     fireEvent.change(screen.getByDisplayValue('2026-06-20'), {
       target: { value: '2026-06-25' },
     });
-    fireEvent.blur(screen.getByDisplayValue('2026-06-25'));
+    // Applying a custom date closes the sheet immediately.
+    expect(screen.queryByRole('dialog', { name: 'Срок' })).toBeNull();
 
     rerender(
       expandedRow(
@@ -265,6 +267,105 @@ describe('TaskRow editor — draft re-sync on concurrent updates', () => {
     ).toBe('Купить молоко');
     fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
     expect(screen.getByDisplayValue('2026-06-25')).toBeTruthy();
+  });
+});
+
+function collapsedRow(
+  task: Task,
+  currentUser: User,
+  handlers: {
+    onComplete?: (task: Task) => void;
+    onReopen?: (task: Task) => void;
+    onToggleExpand?: (id: number) => void;
+  } = {},
+) {
+  return (
+    <TaskRow
+      task={task}
+      currentUser={currentUser}
+      members={members}
+      expanded={false}
+      onToggleExpand={handlers.onToggleExpand ?? (() => undefined)}
+      onComplete={handlers.onComplete ?? (() => undefined)}
+      onReopen={handlers.onReopen ?? (() => undefined)}
+      onSave={() => Promise.resolve()}
+      onDelete={() => Promise.resolve()}
+    />
+  );
+}
+
+describe('TaskRow — reopen confirmation (A3)', () => {
+  it('single tap on a done task arms confirmation instead of reopening', () => {
+    const onReopen = vi.fn();
+    render(collapsedRow(makeTask({ status: 'done' }), admin, { onReopen }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вернуть в работу' }));
+
+    expect(onReopen).not.toHaveBeenCalled();
+    expect(screen.getByText('Вернуть?')).toBeTruthy();
+  });
+
+  it('second tap within the window reopens the task', () => {
+    const onReopen = vi.fn();
+    render(collapsedRow(makeTask({ status: 'done' }), admin, { onReopen }));
+    const checkbox = screen.getByRole('button', { name: 'Вернуть в работу' });
+
+    fireEvent.click(checkbox);
+    fireEvent.click(checkbox);
+
+    expect(onReopen).toHaveBeenCalledTimes(1);
+  });
+
+  it('single tap on an open task completes immediately', () => {
+    const onComplete = vi.fn();
+    render(collapsedRow(makeTask({ status: 'open' }), admin, { onComplete }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отметить выполненной' }));
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('disarms the confirmation once the window elapses', () => {
+    vi.useFakeTimers();
+    try {
+      const onReopen = vi.fn();
+      render(collapsedRow(makeTask({ status: 'done' }), admin, { onReopen }));
+      const checkbox = screen.getByRole('button', { name: 'Вернуть в работу' });
+
+      fireEvent.click(checkbox);
+      expect(screen.getByText('Вернуть?')).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(2600);
+      });
+      fireEvent.click(checkbox);
+
+      expect(onReopen).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tapping the row body disarms the confirmation', () => {
+    const onReopen = vi.fn();
+    const onToggleExpand = vi.fn();
+    render(
+      collapsedRow(makeTask({ status: 'done' }), admin, {
+        onReopen,
+        onToggleExpand,
+      }),
+    );
+    const checkbox = screen.getByRole('button', { name: 'Вернуть в работу' });
+
+    fireEvent.click(checkbox);
+    expect(screen.getByText('Вернуть?')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Купить молоко'));
+    expect(onToggleExpand).toHaveBeenCalledWith(10);
+    expect(screen.queryByText('Вернуть?')).toBeNull();
+
+    fireEvent.click(checkbox);
+    expect(onReopen).not.toHaveBeenCalled();
   });
 });
 

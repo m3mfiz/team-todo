@@ -33,6 +33,8 @@
   --overdue: #ff3b30;
   --header-bg: rgba(255, 255, 255, 0.86);
   --tabbar-bg: rgba(255, 255, 255, 0.9);
+  /* Scrim behind an expanded task card (B3 morph) */
+  --bg-dim: rgba(0, 0, 0, 0.16);
 
   --radius: 13px;
   --col-max: 640px;
@@ -66,6 +68,7 @@
     --checkbox-border: #48484a;
     --header-bg: rgba(0, 0, 0, 0.8);
     --tabbar-bg: rgba(12, 12, 13, 0.88);
+    --bg-dim: rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -364,6 +367,63 @@ select {
   color: var(--overdue);
 }
 
+.header__search-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: -8px 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 50%;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+.header__search-btn:active {
+  background: var(--bg-soft);
+  color: var(--blue);
+}
+
+/* Quick Find bar */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+}
+.search-bar__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: var(--bg-soft);
+  border-radius: 11px;
+  padding: 11px 14px;
+  font-size: 16px;
+  outline: none;
+  min-height: 44px;
+  color: var(--ink);
+  transition: background-color 150ms var(--ease);
+}
+.search-bar__input:focus {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1.5px var(--blue) inset;
+}
+.search-bar__cancel {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 500;
+  padding: 12px 4px;
+  min-height: 44px;
+  border-radius: 8px;
+}
+.search-bar__cancel:active {
+  opacity: 0.6;
+}
+
 /* admin segmented filter */
 .segmented {
   display: flex;
@@ -441,11 +501,30 @@ select {
   opacity: 0.55;
 }
 .taskrow--expanded {
+  position: relative;
+  z-index: 16;
   background: var(--bg-soft);
   border-radius: var(--radius);
   border-bottom-color: transparent;
   margin: 4px -10px;
   padding: 0 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px) scale(1.012);
+  transition: box-shadow 280ms var(--ease), transform 280ms var(--ease),
+    background-color 200ms var(--ease);
+}
+
+/* Dims the rest of the list behind an expanded card (B3 morph); tapping it
+   collapses the same way the card itself does. Only mounted while a task is
+   expanded, so it never interferes with ordinary list scrolling. */
+.backdrop-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: var(--bg-dim);
+  border: none;
+  padding: 0;
+  animation: fadeIn 200ms var(--ease);
 }
 
 .taskrow__main {
@@ -499,6 +578,18 @@ select {
   transform: scale(1);
   opacity: 1;
 }
+.checkbox--confirm {
+  animation: checkboxPulse 1s var(--ease) infinite;
+}
+@keyframes checkboxPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(255, 59, 48, 0);
+  }
+}
 
 .taskrow__body {
   flex: 1;
@@ -510,6 +601,12 @@ select {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.taskrow__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .taskrow__title {
   font-size: 16px;
@@ -523,6 +620,18 @@ select {
   text-decoration: line-through;
   text-decoration-color: var(--gray-2);
   opacity: 0.8;
+}
+.taskrow__confirm-label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--overdue);
+}
+.search-highlight {
+  background: var(--blue-tint);
+  color: var(--blue);
+  border-radius: 3px;
+  padding: 0 1px;
 }
 
 .taskrow__meta {
@@ -567,9 +676,8 @@ select {
   background: var(--blue-tint);
   color: var(--blue);
 }
-.chip--progress {
-  background: var(--bg-soft);
-  color: var(--ink-2);
+.chip--pie {
+  gap: 5px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -798,20 +906,6 @@ input[type='date']::-webkit-date-and-time-value {
   font-style: normal;
 }
 
-/* Inline date input inside the facts dl */
-.editor__date--inline {
-  border: 1px solid var(--blue);
-  background: var(--bg-elev);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 14px;
-  outline: none;
-  min-height: 36px;
-  -webkit-appearance: none;
-  appearance: none;
-  color: var(--ink);
-}
-
 /* Inline select inside the facts dl */
 .editor__select--inline {
   border: 1px solid var(--blue);
@@ -885,8 +979,15 @@ input[type='date']::-webkit-date-and-time-value {
 .empty {
   display: grid;
   place-items: center;
+  gap: 14px;
   min-height: 50vh;
   padding: 40px;
+}
+.empty__icon {
+  display: grid;
+  place-items: center;
+  opacity: 0.28;
+  filter: grayscale(1);
 }
 .empty__text {
   color: var(--gray);
@@ -1074,6 +1175,61 @@ input[type='date']::-webkit-date-and-time-value {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 4px;
+}
+
+/* WhenSheet stacked on top of another sheet (AddSheet) */
+.sheet-backdrop--nested {
+  z-index: 70;
+}
+
+.sheet__heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 4px 2px;
+}
+
+/* «Срок» preset rows — large tappable rows in the style of Things' When picker */
+.when-preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: none;
+  background: var(--bg-soft);
+  border-radius: 10px;
+  font-size: 16px;
+  color: var(--ink);
+  text-align: left;
+  transition: background-color 120ms var(--ease);
+}
+.when-preset:active {
+  background: var(--tap-highlight);
+}
+.when-preset--date input[type='date'] {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
+}
+.when-preset--destructive {
+  color: var(--overdue);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+/* AddSheet's «Срок» field, now a tappable row opening WhenSheet */
+.editor__date-btn {
+  text-align: left;
 }
 
 /* ============================================================
