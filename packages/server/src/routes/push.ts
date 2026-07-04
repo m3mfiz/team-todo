@@ -17,7 +17,6 @@ const unsubscribeSchema = z.object({
 });
 
 interface SubscriptionOwnerRow {
-  id: number;
   user_id: number;
 }
 
@@ -38,26 +37,22 @@ export function registerPushRoutes(app: FastifyInstance, db: DB): void {
       const userId = request.user.id;
 
       const existing = db
-        .prepare(
-          'SELECT id, user_id FROM push_subscriptions WHERE endpoint = ?',
-        )
+        .prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?')
         .get(body.endpoint) as SubscriptionOwnerRow | undefined;
 
       if (existing && existing.user_id !== userId) {
         throw AppError.conflict('Endpoint already registered to another user');
       }
 
-      if (existing) {
-        // Same user re-subscribing: refresh the keys.
-        db.prepare(
-          'UPDATE push_subscriptions SET p256dh = ?, auth = ? WHERE id = ?',
-        ).run(body.keys.p256dh, body.keys.auth, existing.id);
-      } else {
-        db.prepare(
-          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
-           VALUES (?, ?, ?, ?)`,
-        ).run(userId, body.endpoint, body.keys.p256dh, body.keys.auth);
-      }
+      // Upsert so a concurrent duplicate subscribe by the same user is
+      // idempotent instead of hitting UNIQUE(endpoint).
+      db.prepare(
+        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           p256dh = excluded.p256dh,
+           auth = excluded.auth`,
+      ).run(userId, body.endpoint, body.keys.p256dh, body.keys.auth);
 
       return { ok: true };
     },

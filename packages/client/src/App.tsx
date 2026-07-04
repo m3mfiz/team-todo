@@ -49,6 +49,7 @@ export default function App(): JSX.Element {
   const [showAdd, setShowAdd] = useState(false);
   const [leavingIds, setLeavingIds] = useState<Set<number>>(new Set());
   const [showPushBanner, setShowPushBanner] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const leaveTimers = useRef<Map<number, number>>(new Map());
 
@@ -58,6 +59,7 @@ export default function App(): JSX.Element {
     setUsers([]);
     setTasks([]);
     setView('tasks');
+    setLoadError(false);
     setPhase('login');
   }, []);
 
@@ -76,8 +78,10 @@ export default function App(): JSX.Element {
       ]);
       if (me.role === 'admin') setUsers(u);
       setTasks(t);
+      setLoadError(false);
     } catch {
-      /* leave with whatever we have; session-lost handled by api */
+      /* session-lost handled by api; anything else is a load failure */
+      setLoadError(true);
     }
   }, []);
 
@@ -106,6 +110,7 @@ export default function App(): JSX.Element {
     try {
       const t = await api.tasks();
       setTasks(t);
+      setLoadError(false);
     } catch {
       /* ignore; session-lost handled by api */
     }
@@ -242,6 +247,21 @@ export default function App(): JSX.Element {
         );
       }
 
+      // The leaving flag drops only when BOTH the linger elapsed (animation
+      // floor) AND the PATCH succeeded — a slow response must not flicker the
+      // row back into the open list before the server confirms.
+      let lingerElapsed = false;
+      let patched = false;
+      const dropLeaving = (): void =>
+        setLeavingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(task.id);
+          return next;
+        });
+      const finish = (): void => {
+        if (lingerElapsed && patched) dropLeaving();
+      };
+
       // Fire PATCH immediately (optimistic).
       void (async () => {
         try {
@@ -250,29 +270,28 @@ export default function App(): JSX.Element {
             prev.map((t) => (t.id === task.id ? updated : t)),
           );
         } catch {
-          // rollback: restore optimistic mark and drop from leaving
+          // rollback: restore optimistic mark and drop from leaving immediately
           if (sharedAsMember && snapshot) {
             setTasks((prev) =>
               prev.map((t) => (t.id === task.id ? snapshot : t)),
             );
           }
-          setLeavingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(task.id);
-            return next;
-          });
+          const pending = leaveTimers.current.get(task.id);
+          if (pending) {
+            window.clearTimeout(pending);
+            leaveTimers.current.delete(task.id);
+          }
+          dropLeaving();
           return;
         }
+        patched = true;
+        finish();
       })();
 
-      // After linger, drop the leaving flag so the (now done) task exits the open list.
       const timerId = window.setTimeout(() => {
-        setLeavingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(task.id);
-          return next;
-        });
+        lingerElapsed = true;
         leaveTimers.current.delete(task.id);
+        finish();
       }, COMPLETE_LINGER_MS);
       leaveTimers.current.set(task.id, timerId);
     },
@@ -326,13 +345,18 @@ export default function App(): JSX.Element {
   );
 
   const handleDelete = useCallback(async (id: number) => {
-    const snapshot = tasks;
+    const removed = tasks.find((t) => t.id === id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
     setExpandedId(null);
     try {
       await api.deleteTask(id);
     } catch {
-      setTasks(snapshot);
+      // re-insert only the deleted task; ordering self-corrects on next poll
+      if (removed) {
+        setTasks((prev) =>
+          prev.some((t) => t.id === id) ? prev : [removed, ...prev],
+        );
+      }
     }
   }, [tasks]);
 
@@ -347,6 +371,10 @@ export default function App(): JSX.Element {
   const toggleExpand = useCallback((id: number) => {
     setExpandedId((cur) => (cur === id ? null : id));
   }, []);
+
+  const handleRetryLoad = useCallback(() => {
+    if (user) void loadInitial(user);
+  }, [user, loadInitial]);
 
   // --- Derived ---------------------------------------------------------------
   if (phase === 'loading') {
@@ -493,6 +521,17 @@ export default function App(): JSX.Element {
             onUsersChanged={refetchUsers}
             onTasksChanged={refetch}
           />
+        ) : loadError ? (
+          <div className="load-error" role="alert">
+            <p className="load-error__text">Не удалось загрузить задачи</p>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleRetryLoad}
+            >
+              Повторить
+            </button>
+          </div>
         ) : (
           <TaskList
             tab={tab}

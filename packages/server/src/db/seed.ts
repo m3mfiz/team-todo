@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -63,16 +64,33 @@ export async function seed(db: DB): Promise<string[]> {
   }
 
   if (!hasAnyMember(db)) {
+    const credentials: Array<{ username: string; password: string }> = [];
     for (const member of MEMBERS) {
+      // Deterministic passwords only under vitest (the test contract logs in
+      // as ivan/ivan123 etc.); real bootstraps get random one-time passwords.
+      const password =
+        process.env.VITEST !== undefined
+          ? `${member.username}123`
+          : randomBytes(9).toString('base64url');
       const inserted = await insertUser(db, {
         username: member.username,
         displayName: member.displayName,
-        password: `${member.username}123`,
+        password,
         role: 'member',
       });
       if (inserted) {
         created.push(member.username);
+        credentials.push({ username: member.username, password });
       }
+    }
+    if (process.env.VITEST === undefined && credentials.length > 0) {
+      console.log('');
+      console.log('=== Bootstrap member passwords (shown once, record them) ===');
+      for (const { username, password } of credentials) {
+        console.log(`  ${username}: ${password}`);
+      }
+      console.log('============================================================');
+      console.log('');
     }
   }
 

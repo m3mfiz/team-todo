@@ -114,10 +114,36 @@ export function computeDeadlineReminders(
 
   const everyone = allUserIds(db);
 
+  // Everyone-tasks skip users who already marked their part done (one batched
+  // query over the reminder tasks, keyed per task).
+  const everyoneTaskIds = rows
+    .filter((row) => row.assignee_id === null)
+    .map((row) => row.id);
+  const completedByTask = new Map<number, Set<number>>();
+  if (everyoneTaskIds.length > 0) {
+    const placeholders = everyoneTaskIds.map(() => '?').join(', ');
+    const marks = db
+      .prepare(
+        `SELECT task_id, user_id FROM task_completions
+         WHERE task_id IN (${placeholders})`,
+      )
+      .all(...everyoneTaskIds) as Array<{ task_id: number; user_id: number }>;
+    for (const mark of marks) {
+      const set = completedByTask.get(mark.task_id) ?? new Set<number>();
+      set.add(mark.user_id);
+      completedByTask.set(mark.task_id, set);
+    }
+  }
+
   return rows.map((row) => {
     const kind = kindByDate.get(row.deadline) as DeadlineReminder['kind'];
-    const recipientIds =
-      row.assignee_id === null ? everyone : [row.assignee_id];
+    let recipientIds: number[];
+    if (row.assignee_id === null) {
+      const done = completedByTask.get(row.id);
+      recipientIds = done ? everyone.filter((id) => !done.has(id)) : everyone;
+    } else {
+      recipientIds = [row.assignee_id];
+    }
     return {
       taskId: row.id,
       title: row.title,

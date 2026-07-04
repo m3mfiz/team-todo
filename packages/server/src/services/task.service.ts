@@ -424,6 +424,11 @@ export function updateTask(
     applyMark();
   }
 
+  // An actual reassignment invalidates per-member marks; the client always
+  // re-sends assigneeId on admin edits, so only a changed value may clear.
+  const assigneeChanged =
+    patch.assigneeId !== undefined && patch.assigneeId !== row.assignee_id;
+
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
 
@@ -457,9 +462,15 @@ export function updateTask(
   // transaction; skip the redundant generic UPDATE.
   if (sets.length > 0 || !statusAsPersonalMark) {
     sets.push("updated_at = datetime('now')");
-    db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = @id`).run(
-      params,
-    );
+    const applyPatch = db.transaction(() => {
+      db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = @id`).run(
+        params,
+      );
+      if (assigneeChanged) {
+        db.prepare('DELETE FROM task_completions WHERE task_id = ?').run(id);
+      }
+    });
+    applyPatch();
   }
 
   const updated = getTaskRow(db, id);

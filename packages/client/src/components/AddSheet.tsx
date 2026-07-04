@@ -21,6 +21,7 @@ export function AddSheet({
   // Default: «Себе» -> currentUser.id
   const [assignee, setAssignee] = useState<string>(String(currentUser.id));
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export function AddSheet({
   async function submit(): Promise<void> {
     if (saving || !title.trim()) return;
     setSaving(true);
+    setError(null);
     const input: CreateTaskInput = { title: title.trim() };
     if (notes.trim()) input.notes = notes.trim();
     if (deadline) input.deadline = deadline;
@@ -49,6 +51,7 @@ export function AddSheet({
       await onCreate(input);
       onClose();
     } catch {
+      setError('Не удалось сохранить — попробуйте ещё раз');
       setSaving(false);
     }
   }
@@ -117,6 +120,8 @@ export function AddSheet({
             </label>
           )}
         </div>
+
+        {error && <div className="inline-error">{error}</div>}
 
         <div className="sheet__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>

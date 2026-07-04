@@ -74,7 +74,15 @@ export async function buildApp(
     startReminderCron(db, app.log);
   }
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async (_request, reply) => {
+    try {
+      db.prepare('SELECT 1').get();
+      return { ok: true };
+    } catch {
+      reply.code(503);
+      return { ok: false };
+    }
+  });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
@@ -150,11 +158,22 @@ const isDirectRun =
 
 if (isDirectRun) {
   buildApp()
-    .then((app) =>
-      app.listen({ port: config.port, host: '0.0.0.0' }).then(() => {
+    .then((app) => {
+      // Graceful shutdown (the onClose hook closes the db).
+      let shuttingDown = false;
+      const shutdown = () => {
+        if (shuttingDown) {
+          return;
+        }
+        shuttingDown = true;
+        app.close().then(() => process.exit(0));
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
+      return app.listen({ port: config.port, host: '0.0.0.0' }).then(() => {
         app.log.info(`Server listening on port ${config.port}`);
-      }),
-    )
+      });
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);

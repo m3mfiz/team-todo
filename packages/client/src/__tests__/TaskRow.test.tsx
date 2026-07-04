@@ -5,9 +5,9 @@
 // Сохранить button send a no-op PATCH («пустой PATCH не уходит при
 // отсутствии изменений»).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskRow } from '../components/TaskRow';
-import type { Task, User } from '../types';
+import type { Task, UpdateTaskInput, User } from '../types';
 
 const admin: User = {
   id: 1,
@@ -41,8 +41,12 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
-function renderExpanded(task: Task, currentUser: User, onSave = vi.fn()) {
-  const utils = render(
+function expandedRow(
+  task: Task,
+  currentUser: User,
+  onSave: (id: number, input: UpdateTaskInput) => Promise<void>,
+) {
+  return (
     <TaskRow
       task={task}
       currentUser={currentUser}
@@ -53,8 +57,12 @@ function renderExpanded(task: Task, currentUser: User, onSave = vi.fn()) {
       onReopen={() => undefined}
       onSave={onSave}
       onDelete={() => Promise.resolve()}
-    />,
+    />
   );
+}
+
+function renderExpanded(task: Task, currentUser: User, onSave = vi.fn()) {
+  const utils = render(expandedRow(task, currentUser, onSave));
   return { ...utils, onSave };
 }
 
@@ -165,5 +173,125 @@ describe('TaskRow editor — real edits still save', () => {
       notes: 'новые заметки',
     });
     await Promise.resolve();
+  });
+});
+
+describe('TaskRow editor — draft re-sync on concurrent updates', () => {
+  it('re-syncs drafts from the task when idle and updatedAt changes', () => {
+    const onSave = vi.fn();
+    const { rerender } = renderExpanded(
+      makeTask({ notes: 'старые', deadline: '2026-06-20' }),
+      admin,
+      onSave,
+    );
+
+    rerender(
+      expandedRow(
+        makeTask({
+          title: 'Купить кефир',
+          notes: 'свежие',
+          deadline: '2026-06-25',
+          assigneeId: null,
+          assigneeName: null,
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        }),
+        admin,
+        onSave,
+      ),
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Редактировать название' }).textContent,
+    ).toBe('Купить кефир');
+    expect(
+      screen.getByRole('button', { name: 'Редактировать заметки' }).textContent,
+    ).toBe('свежие');
+    expect(
+      screen.getByRole('button', { name: 'Редактировать исполнителя' }).textContent,
+    ).toBe('Всем');
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
+    expect(screen.getByDisplayValue('2026-06-25')).toBeTruthy();
+  });
+
+  it('preserves drafts while a field is active', () => {
+    const onSave = vi.fn();
+    const { rerender } = renderExpanded(makeTask(), admin, onSave);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать название' }));
+    expect(screen.getByDisplayValue('Купить молоко')).toBeTruthy();
+
+    rerender(
+      expandedRow(
+        makeTask({
+          title: 'Купить кефир',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        }),
+        admin,
+        onSave,
+      ),
+    );
+
+    expect(screen.getByDisplayValue('Купить молоко')).toBeTruthy();
+  });
+
+  it('preserves drafts while dirty even with no active field', () => {
+    const onSave = vi.fn();
+    const { rerender } = renderExpanded(
+      makeTask({ deadline: '2026-06-20' }),
+      admin,
+      onSave,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
+    fireEvent.change(screen.getByDisplayValue('2026-06-20'), {
+      target: { value: '2026-06-25' },
+    });
+    fireEvent.blur(screen.getByDisplayValue('2026-06-25'));
+
+    rerender(
+      expandedRow(
+        makeTask({
+          title: 'Купить кефир',
+          deadline: '2026-06-20',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        }),
+        admin,
+        onSave,
+      ),
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Редактировать название' }).textContent,
+    ).toBe('Купить молоко');
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать срок' }));
+    expect(screen.getByDisplayValue('2026-06-25')).toBeTruthy();
+  });
+});
+
+describe('TaskRow editor — save errors are visible', () => {
+  it('shows an inline error when save fails and clears it on the next attempt', async () => {
+    const onSave = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(undefined);
+    renderExpanded(makeTask(), admin, onSave);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Редактировать название' }));
+    fireEvent.change(screen.getByPlaceholderText('Название'), {
+      target: { value: 'Купить кефир' },
+    });
+    fireEvent.click(saveButton());
+
+    expect(
+      await screen.findByText('Не удалось сохранить — попробуйте ещё раз'),
+    ).toBeTruthy();
+
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Не удалось сохранить — попробуйте ещё раз'),
+      ).toBeNull(),
+    );
+    expect(onSave).toHaveBeenCalledTimes(2);
   });
 });

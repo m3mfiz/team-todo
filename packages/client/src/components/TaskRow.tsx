@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import type { Task, UpdateTaskInput, User } from '../types';
 import { formatDeadlineShort, isOverdue } from '../dates';
 import { CheckMark, TrashIcon } from '../icons';
@@ -226,12 +226,34 @@ function TaskDetail({
 
   const [activeField, setActiveField] = useState<ActiveField>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const notesInputRef = useRef<HTMLTextAreaElement>(null);
   const deadlineInputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
+
+  // Task the drafts were last seeded from — the baseline for "did the user edit".
+  const baselineRef = useRef(task);
+
+  // Re-sync drafts when a poll brings someone else's edit — but never clobber
+  // an active or user-edited draft, or one mid-save.
+  useEffect(() => {
+    if (activeField !== null || saving) return;
+    const base = baselineRef.current;
+    const untouched =
+      draftTitle === base.title &&
+      draftNotes === (base.notes ?? '') &&
+      draftDeadline === (base.deadline ?? '') &&
+      draftAssignee === (base.assigneeId === null ? 'all' : String(base.assigneeId));
+    if (!untouched) return;
+    baselineRef.current = task;
+    setDraftTitle(task.title);
+    setDraftNotes(task.notes ?? '');
+    setDraftDeadline(task.deadline ?? '');
+    setDraftAssignee(task.assigneeId === null ? 'all' : String(task.assigneeId));
+  }, [task.updatedAt, activeField, saving]);
 
   // Dirty check — any draft differs from original
   const isDirty =
@@ -250,12 +272,14 @@ function TaskDetail({
 
   function handleCancel(): void {
     // Reset all drafts to original values
+    baselineRef.current = task;
     setDraftTitle(task.title);
     setDraftNotes(task.notes ?? '');
     setDraftDeadline(task.deadline ?? '');
     setDraftAssignee(task.assigneeId === null ? 'all' : String(task.assigneeId));
     setActiveField(null);
     setConfirmDelete(false);
+    setSaveError(null);
   }
 
   async function handleSave(): Promise<void> {
@@ -266,6 +290,7 @@ function TaskDetail({
       return;
     }
     setSaving(true);
+    setSaveError(null);
     const input: UpdateTaskInput = {
       title: draftTitle.trim(),
       notes: draftNotes.trim(),
@@ -277,6 +302,8 @@ function TaskDetail({
     try {
       await onSave(task.id, input);
       setActiveField(null);
+    } catch {
+      setSaveError('Не удалось сохранить — попробуйте ещё раз');
     } finally {
       setSaving(false);
     }
@@ -471,6 +498,7 @@ function TaskDetail({
       <CompletionList task={task} members={members} />
 
       {/* ── Actions: trash + Save/Cancel ── */}
+      {saveError && <div className="inline-error">{saveError}</div>}
       {(showActions || canEdit) && (
         <div className="editor__actions">
           {canEdit ? (
@@ -503,7 +531,7 @@ function TaskDetail({
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={saving || !draftTitle.trim() || !isDirty}
               >
                 Сохранить

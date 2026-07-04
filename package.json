@@ -11,7 +11,7 @@
     "dev": "concurrently -n server,client \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm -w packages/server run dev",
     "dev:client": "npm -w packages/client run dev",
-    "build": "npm -w packages/client run build",
+    "build": "npm run typecheck && npm -w packages/client run build",
     "start": "npm -w packages/server run start",
     "db:setup": "npm -w packages/server run db:setup",
     "test": "npm -w packages/server run test && npm -w packages/client run test",

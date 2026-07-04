@@ -148,6 +148,44 @@ describe('push routes', () => {
       db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ?').get(SUB.endpoint),
     ).toBeUndefined();
   });
+
+  it('duplicate subscribe by the same user keeps exactly one row; other user still 409s', async () => {
+    const endpoint = 'https://push.example.com/sub-B';
+    for (const keys of [
+      { p256dh: 'p1', auth: 'a1' },
+      { p256dh: 'p2', auth: 'a2' },
+    ]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/push/subscribe',
+        headers: authHeader(ivan.accessToken),
+        payload: { endpoint, keys },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+    }
+    const rows = db
+      .prepare('SELECT user_id, p256dh, auth FROM push_subscriptions WHERE endpoint = ?')
+      .all(endpoint) as Array<{ user_id: number; p256dh: string; auth: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user_id).toBe(ivan.user.id);
+    expect(rows[0].p256dh).toBe('p2');
+    expect(rows[0].auth).toBe('a2');
+
+    const conflict = await app.inject({
+      method: 'POST',
+      url: '/api/push/subscribe',
+      headers: authHeader(maria.accessToken),
+      payload: { endpoint, keys: { p256dh: 'p3', auth: 'a3' } },
+    });
+    expect(conflict.statusCode).toBe(409);
+    const after = db
+      .prepare('SELECT user_id, p256dh FROM push_subscriptions WHERE endpoint = ?')
+      .all(endpoint) as Array<{ user_id: number; p256dh: string }>;
+    expect(after).toHaveLength(1);
+    expect(after[0].user_id).toBe(ivan.user.id);
+    expect(after[0].p256dh).toBe('p2');
+  });
 });
 
 describe('computeNewTaskRecipients', () => {

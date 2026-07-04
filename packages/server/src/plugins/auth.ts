@@ -55,6 +55,7 @@ export function registerAuth(app: FastifyInstance, _db: DB): void {
       expiresIn: '15m',
     },
     verify: {
+      algorithms: ['HS256'],
       allowedAud: 'access',
     },
   });
@@ -71,6 +72,7 @@ export function registerAuth(app: FastifyInstance, _db: DB): void {
       expiresIn: '7d',
     },
     verify: {
+      algorithms: ['HS256'],
       allowedAud: 'refresh',
     },
   });

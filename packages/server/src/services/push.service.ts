@@ -13,9 +13,17 @@ interface SubscriptionRow {
   auth: string;
 }
 
+export interface PushLogger {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+}
+
 // Runtime flag: push is only enabled once setVapidDetails succeeds with a valid
 // key pair. When disabled, every push operation is a silent no-op.
 let pushEnabled = false;
+
+// Logger threaded in via initPush (Fastify's app.log in production).
+let pushLog: PushLogger = console;
 
 export function isPushEnabled(): boolean {
   return pushEnabled;
@@ -27,9 +35,8 @@ export function getVapidPublicKey(): string | null {
 
 // Idempotent: safe to call once at startup. Invalid/missing keys never throw —
 // they simply leave push disabled. A single log line records the decision.
-export function initPush(
-  log: { info: (msg: string) => void; warn: (msg: string) => void } = console,
-): void {
+export function initPush(log: PushLogger = console): void {
+  pushLog = log;
   if (
     config.vapidPublicKey === undefined ||
     config.vapidPrivateKey === undefined ||
@@ -97,7 +104,7 @@ export async function sendToUser(
         // Subscription is gone for good: drop the stale row.
         deleteSubscription(db, sub.id);
       } else {
-        console.warn(
+        pushLog.warn(
           `Web push send failed (user ${userId}): ${
             err instanceof Error ? err.message : String(err)
           }`,

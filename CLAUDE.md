@@ -60,7 +60,7 @@ Host `138.16.178.200` (shared with lab-booking on :3001 — do not touch its con
 ssh prod 'cd ~/team-todo && git checkout -- package-lock.json && git pull --ff-only && npm install && npm run db:setup && npm run build && pm2 restart team-todo --update-env'
 ```
 
-The `git checkout -- package-lock.json` is required — prod's npm rewrites the lockfile. Prod `.env` holds real JWT/VAPID secrets and `ADMIN_PASSWORD` (chmod 600).
+The `git checkout -- package-lock.json` is required — prod's npm rewrites the lockfile. `npm run build` runs the full typecheck (both packages) before the client build, so a type error aborts the deploy before `pm2 restart`. Prod `.env` holds real JWT/VAPID secrets and `ADMIN_PASSWORD` (chmod 600).
 
 ## Gotchas
 

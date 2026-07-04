@@ -37,7 +37,8 @@ export function getPushSupport(): PushSupport {
  * the UI — failures are logged and surfaced via the return value.
  */
 export async function ensurePushSubscription(): Promise<SubscribeResult> {
-  if (getPushSupport() !== 'granted') return getPushSupport();
+  const support = getPushSupport();
+  if (support !== 'granted') return support;
   try {
     const { publicKey } = await api.vapidPublicKey();
     if (!publicKey) return 'disabled';
